@@ -1,6 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import animation
+# from robot_sim import simulate_robot
 
 class Obstacle():
     def __init__(self, x_pos, y_pos, r) -> None:
@@ -57,13 +58,15 @@ class VisStaticRobotEnv():
         self._traj_vis.set_data(self._trajectory[0,:], self._trajectory[1,:])
     
 
-# some dummy trajectory    
-vis = VisStaticRobotEnv((-5, 5), (-5, 5), (0, 0), 0.2,
-                        [Obstacle(3, 3, 0.5), Obstacle(5, 5, 0.5)])
+if __name__ == "__main__":
+    # some dummy trajectory    
+    vis = VisStaticRobotEnv((-5, 5), (-5, 5), (0, 0), 0.2,
+                            [Obstacle(3, 3, 0.5), Obstacle(5, 5, 0.5)])
 
-x = np.linspace(-5, 5, 360)
-y = np.sin(x)
-trajectory = np.vstack((x, y))
-
-vis.set_trajectory(trajectory)
-vis.run_animation()
+    x = np.linspace(-5, 5, 360)
+    y = np.sin(x)
+    trajectory = np.vstack(x, y)
+    
+    print(trajectory.shape)
+    vis.set_trajectory(trajectory)
+    vis.run_animation()

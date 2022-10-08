@@ -1,1 +1,4 @@
 .vscode/*
+*c_generated_code*
+**/__pycache__
+
