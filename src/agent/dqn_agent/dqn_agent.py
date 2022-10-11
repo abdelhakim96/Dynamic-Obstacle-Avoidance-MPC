@@ -43,7 +43,7 @@ class DQNAgent(object):
         self.env_name = env_name
 
         self.loss_function = torch.nn.MSELoss()
-        self.optimizer = optim.Adam(self.Q.parameters(), lr=lr)
+        self.optimizer = optim.AdamW(self.Q.parameters(), lr=lr)
 
         self.num_actions = num_actions
 
@@ -61,10 +61,6 @@ class DQNAgent(object):
         bn = torch.Tensor(bn).float().cuda()
         br = torch.Tensor(br).cuda()
         bd = torch.Tensor(bd).cuda()
-
-        if self.env_name == 'CarRacing-v0':
-            bs = bs.permute(0, 3, 1, 2)
-            bn = bn.permute(0, 3, 1, 2)
 
         # TD target(Bellman Eq) and Loss
         q = self.Q(bs).gather(1, ba.unsqueeze(-1)).squeeze(-1)
@@ -89,10 +85,6 @@ class DQNAgent(object):
         """
         r = np.random.uniform()
         if deterministic or r > self.epsilon:
-            if self.env_name == "CarRacing-v0":
-                state = state.transpose(2, 0, 1)
-                if len(state.shape) == 3:
-                    state = state.reshape(1, 1, 96, 96)
             action_id = torch.argmax(self.Q(torch.Tensor(state).cuda())).item()
         else:
             action_id = np.random.randint(self.num_actions)
