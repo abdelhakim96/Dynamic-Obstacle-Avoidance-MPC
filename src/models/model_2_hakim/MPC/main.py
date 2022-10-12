@@ -1,5 +1,3 @@
-
-
 #Imports
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSimSolver
 from robot_model import  export_parametric_robot_model
