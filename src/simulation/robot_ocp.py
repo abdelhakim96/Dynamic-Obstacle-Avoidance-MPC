@@ -15,7 +15,6 @@ import numpy as np
 import casadi as ca
 
 def solve_robot_ocp_closed_loop(robot_init, robot_end, robot_radius, obstacles: List[Obstacle]):
-    print('entered the function')
     ocp = AcadosOcp()
     
     model = export_robot_ode_model()
@@ -44,9 +43,9 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, robot_radius, obstacles: 
     ocp.model.cost_expr_ext_cost = model.u.T @ R @ model.u
     ocp.model.cost_expr_ext_cost_e = (model.x[0:2] - robot_end).T @ E_pos @ (model.x[0:2] - robot_end) + model.x[3:].T @ E_dot @ model.x[3:]
     
-    # limit controls t0 range [-1 , 1]
-    ocp.constraints.lbu = np.array([-1, -1])
-    ocp.constraints.ubu = np.array([1, 1])
+    # limit controls to range [-1 , 1]
+    ocp.constraints.lbu = np.array([-10, -10])
+    ocp.constraints.ubu = np.array([10, 10])
     ocp.constraints.idxbu = np.array([0, 1])
     
     ## fix initial position
@@ -68,22 +67,21 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, robot_radius, obstacles: 
         h_lb += [(o.r + robot_radius)**2]
         h_ub += [1e15]
     
-    model.con_h_expr = ca.vertcat(*h)
-    ocp.constraints.lh = np.array(h_lb)
-    ocp.constraints.uh = np.array(h_ub)
+    if len(h) > 0:
+        model.con_h_expr = ca.vertcat(*h)
+        ocp.constraints.lh = np.array(h_lb)
+        ocp.constraints.uh = np.array(h_ub)
     
     # configure solver
     ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
     ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
-    ocp.solver_options.levenberg_marquardt = 1e-2
     ocp.solver_options.integrator_type = 'IRK'
-    ocp.solver_options.nlp_solver_type = 'SQP'  # 'SQP_RTI'
+    ocp.solver_options.nlp_solver_type = 'SQP_RTI'  # 'SQP_RTI'
     ocp.solver_options.tf = Tf
     
     # specify solver and integrator, using same specification
     ocp_solver = AcadosOcpSolver(ocp, json_file='acados_ocp.json')
     ocp_integrator = AcadosSimSolver(ocp, json_file='acados_ocp.json') 
-    ocp_integrator.set('T', Tf / N)
     
     # initialize control trajectory to all 0
     for i in range(N):
@@ -96,38 +94,53 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, robot_radius, obstacles: 
     x0 = robot_init
     simX = np.append(simX, x0.reshape((1, nx)), axis=0)
     
+    # track wether robot hits obstacle along trajectory
+    min_margin_traj = np.inf
     
-    ### CLOSED LOOP IMPLEMENTATION
     i = 0
     while i < max_iter:
         # set constraint on starting position (x0_bar)
-        print(x0)
-        ocp_solver.set(0, 'ubx', x0)         
+        ocp_solver.set(0, 'ubx', x0)
         ocp_solver.set(0, 'lbx', x0)
         
         # solve the ocp for the new starting position and get control for next step
+        print(f"\n\nRUNNING STAGE {i+1}")
         status = ocp_solver.solve()
+        ocp_solver.print_statistics()
+        
         u = ocp_solver.get(0, 'u')
-        print(f"Initial state: {ocp_solver.get(0, 'x')}")
-        print(f"CONTROL: {u}")
+        x_ref = ocp_solver.get(1, 'x')
         
         # simulate model from current position and computed control
         ocp_integrator.set('x', x0)
         ocp_integrator.set('u', u)
         stat_int = ocp_integrator.solve()
-        print(f"Status integrator: {stat_int}")
         
         # get the next starting position after simulation
         x0 = ocp_integrator.get('x')
-        print(f"next initial state: {x0}")
+        print(f"difference predicted next state vs. simulated next state: {x_ref - x0}")
         
-        # store state and control for the trajectory
-        # simX[i+1, :] = x0
-        # simU[i, :] = u
+        # info on wether robot did or did not hit an obstacle:
+        min_margin = np.inf
+        for o in obstacles:
+            margin = np.sqrt((x0[0] - o.x)**2 + (x0[1] - o.y)**2) - (o.r + robot_radius)
+            if margin < min_margin:
+                min_margin = margin
+        print(f"margin to closest obstacle: {min_margin}")
+        if min_margin < min_margin_traj:
+            min_margin_traj = min_margin
+        
         simX = np.append(simX, x0.reshape((1, nx)), axis=0)
         simU = np.append(simU, u.reshape((1, nu)), axis=0)
         
-        print(f"completed stage {i}")
+        # shift initialization for initial guess
+        for j in range(N-1):
+            ocp_solver.set(j, 'x', ocp_solver.get(j+1, 'x'))
+            ocp_solver.set(j, 'u', ocp_solver.get(j+1, 'u'))
+        ocp_solver.set(N-1, 'x', ocp_solver.get(N, 'x'))
+        ocp_solver.set(N-1, 'u', np.array([0, 0]))
+        ocp_solver.set(N, 'x',np.array([0, 0, 0, 0, 0]))
+            
         i += 1
         
         
@@ -140,24 +153,18 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, robot_radius, obstacles: 
         # print(f"statistics after solving iteration {i}:")
         # ocp_solver.print_statistics()
         # print(ocp_solver.get_stats('time_tot'))
-    # ocp_solver.solve()
-    # print(ocp_solver.get_stats('time_tot'))
+    print(f"Final difference to goal state: {simX[-1][0:2] - robot_end}")
+    print(f"Minimal margin to obstacle along trajectory: {min_margin_traj}")
     
-    # for i in range(N):
-    #     simX[i, :] = ocp_solver.get(i, 'x')
-    #     simU[i, :] = ocp_solver.get(i, 'u')
-    # simX[N, :] = ocp_solver.get(N, 'x')
     vis = VisStaticRobotEnv((-3, 3), (-3, 3), (0, 0), robot_radius, obstacles)
     vis.set_trajectory(simX[:,:2].T)
     vis.run_animation()
-    print(simX[-1][0:2] - robot_end)
 
 
 def solve_robot_ocp_open_loop(robot_init, robot_end, robot_radius, obstacles: List[Obstacle]):
     """
         This function needs to be fixed (remove the closed loop part, solver complete OCP for bigger Tf and N)
     """
-    print('entered the function')
     ocp = AcadosOcp()
     
     model = export_robot_ode_model()
@@ -166,7 +173,7 @@ def solve_robot_ocp_open_loop(robot_init, robot_end, robot_radius, obstacles: Li
     Tf = 5
     nx = model.x.size()[0]
     nu = model.u.size()[0]
-    N = 80
+    N = 40
     
     ocp.dims.N = N
     
@@ -179,6 +186,7 @@ def solve_robot_ocp_open_loop(robot_init, robot_end, robot_radius, obstacles: Li
     
     ocp.cost.cost_type = 'EXTERNAL'
     ocp.cost.cost_type_e = 'EXTERNAL'
+    ocp.solver_options.line_search_use_sufficient_descent = 1
     # ocp.model.cost_expr_ext_cost = model.x.T @ Q @ model.x + model.u.T @ R @ model.u
     ocp.model.cost_expr_ext_cost = model.u.T @ R @ model.u
     ocp.model.cost_expr_ext_cost_e = (model.x[0:2] - robot_end).T @ E_pos @ (model.x[0:2] - robot_end) + model.x[3:].T @ E_dot @ model.x[3:]
@@ -206,9 +214,10 @@ def solve_robot_ocp_open_loop(robot_init, robot_end, robot_radius, obstacles: Li
         h_lb += [(o.r + robot_radius)**2]
         h_ub += [1e15]
     
-    model.con_h_expr = ca.vertcat(*h)
-    ocp.constraints.lh = np.array(h_lb)
-    ocp.constraints.uh = np.array(h_ub)
+    if len(h) > 0:
+        model.con_h_expr = ca.vertcat(*h)
+        ocp.constraints.lh = np.array(h_lb)
+        ocp.constraints.uh = np.array(h_ub)
     
     # configure solver
     ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
@@ -217,7 +226,7 @@ def solve_robot_ocp_open_loop(robot_init, robot_end, robot_radius, obstacles: Li
     ocp.solver_options.integrator_type = 'IRK'
     ocp.solver_options.nlp_solver_type = 'SQP'
     # ocp.solver_options.nlp_solver_type = 'SQP_RTI'  # SQP
-    # ocp.solver_options.nlp_solver_max_iter = 1
+    # ocp.solver_options.nlp_solver_max_iter = 100
     
     ocp.solver_options.tf = Tf
     
@@ -226,6 +235,7 @@ def solve_robot_ocp_open_loop(robot_init, robot_end, robot_radius, obstacles: Li
     ocp_integrator.set('T', Tf / N)
     for i in range(N):
         ocp_solver.set(i, 'u', np.array([0, 0]))
+        ocp_solver.set(i+1, 'x', np.array([0, 0, 0, 0, 0]))
     
     simX = np.ndarray((N+1, nx))
     simU = np.ndarray((N, nu))
@@ -260,6 +270,11 @@ def solve_robot_ocp_open_loop(robot_init, robot_end, robot_radius, obstacles: Li
         simX[i+1, :] = x0
         simU[i, :] = u
         
+        # reset initial guess
+        for i in range(N):
+            ocp_solver.set(i, 'u', np.array([0, 0]))
+            ocp_solver.set(i+1, 'x', np.array([0, 0, 0, 0, 0]))
+        
         # # for debugging we can visualize the system after each step
         # vis = VisStaticRobotEnv((-3, 3), (-3, 3), (0, 0), robot_radius, obstacles)
         # vis.set_trajectory(simX[:i+1,:2].T)
@@ -290,20 +305,15 @@ if __name__ == '__main__':
     y_max = 2
     x_min = -2
     x_max = 2
-    r = 0.4
+    r = 0.6
     for i in range(N):
         for j in range(N):
             x = x_min + (i+0.5) * (x_max - x_min) / (N)
             y = y_min + (j+0.5) * (y_max - y_min) / (N)
             obstacles += [Obstacle(x, y, r)]
     
+    print(obstacles)
     solve_robot_ocp_closed_loop(np.array([-2, -2, np.pi / 4, 0, 0]),
-                    np.array([2, 2]),
-                    0.1,
-                    obstacles)
-    # solve_robot_ocp(np.array([-2, -2, np.pi / 4, 0, 0]),
-    #                 np.array([2, 2]),
-    #                 0.1,
-    #                 [Obstacle(0, 0, 0.5),
-    #                  Obstacle(1, 1.5, 0.5)])
-    # solve_robot_ocp(np.ndarray([0, 0, np.pi / 4, 0, 0]), np.ndarray([0, 1]), [])
+                                np.array([2, 2]),
+                                0.1,
+                                obstacles)
