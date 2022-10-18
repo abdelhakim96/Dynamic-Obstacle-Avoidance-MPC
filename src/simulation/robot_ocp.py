@@ -24,12 +24,12 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, robot_radius, obstacles: 
     nu = model.u.size()[0]
     
     # set time frame for which we solve the trajectory at each step and the number of steps we use to discretize it
-    Tf = 5
-    N = 40
+    Tf = 1
+    N = 15
     
     # end the closed loop optimization if close enough to goal or after a certain number of iterations
     TOL = 0.1
-    max_iter = 100
+    max_iter = 400
     
     ocp.dims.N = N
     
@@ -41,12 +41,13 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, robot_radius, obstacles: 
     ocp.cost.cost_type = 'EXTERNAL'
     ocp.cost.cost_type_e = 'EXTERNAL'
     ocp.model.cost_expr_ext_cost = model.u.T @ R @ model.u
+    # ocp.model.cost_expr_ext_cost = 0
     ocp.model.cost_expr_ext_cost_e = (model.x[0:2] - robot_end).T @ E_pos @ (model.x[0:2] - robot_end) + model.x[3:].T @ E_dot @ model.x[3:]
     
-    # limit controls to range [-1 , 1]
-    ocp.constraints.lbu = np.array([-10, -10])
-    ocp.constraints.ubu = np.array([10, 10])
-    ocp.constraints.idxbu = np.array([0, 1])
+    # # limit controls
+    # ocp.constraints.lbu = np.array([-5, -5])
+    # ocp.constraints.ubu = np.array([5, 5])
+    # ocp.constraints.idxbu = np.array([0, 1])
     
     ## fix initial position
     ocp.constraints.x0 = robot_init
@@ -119,6 +120,7 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, robot_radius, obstacles: 
         # get the next starting position after simulation
         x0 = ocp_integrator.get('x')
         print(f"difference predicted next state vs. simulated next state: {x_ref - x0}")
+        print(type(x0))
         
         # info on wether robot did or did not hit an obstacle:
         min_margin = np.inf
@@ -132,6 +134,12 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, robot_radius, obstacles: 
         
         simX = np.append(simX, x0.reshape((1, nx)), axis=0)
         simU = np.append(simU, u.reshape((1, nu)), axis=0)
+        
+        # compute the norm of the state vector (excluding the orientation which we do not consider)
+        # in case we are within the tolerance end the closed loop simulation
+        if np.linalg.norm(np.take(x0, [0, 1, 3, 4]) - np.append(robot_end, [0, 0])) <= TOL:
+            print(f"Reached goal state after iteration {i+1}")
+            break
         
         # shift initialization for initial guess
         for j in range(N-1):
@@ -150,8 +158,6 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, robot_radius, obstacles: 
         # vis.run_animation()
         
         # # some statistics
-        # print(f"statistics after solving iteration {i}:")
-        # ocp_solver.print_statistics()
         # print(ocp_solver.get_stats('time_tot'))
     print(f"Final difference to goal state: {simX[-1][0:2] - robot_end}")
     print(f"Minimal margin to obstacle along trajectory: {min_margin_traj}")
