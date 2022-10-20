@@ -1,8 +1,3 @@
-from importlib import import_module
-from ssl import HAS_ALPN
-import sys
-from xml.etree.ElementTree import XML
-
 from acados_template.acados_model import AcadosModel
 from acados_template.acados_ocp import AcadosOcp
 from acados_template.acados_ocp_solver import AcadosOcpSolver
@@ -56,7 +51,6 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, obstacles: List[Obstacle]
     W_e_2 = np.zeros((1, nx))
     W_e_3 = np.hstack((np.zeros((2, nx - 2)), E_dot))
     ocp.cost.W_e = 2* np.vstack((W_e_1, W_e_2, W_e_3))
-    print(ocp.cost.W_e)
     
     ## fix initial position
     ocp.constraints.x0 = robot_init
@@ -106,6 +100,7 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, obstacles: List[Obstacle]
     # specify solver and integrator, using same specification
     ocp_solver = AcadosOcpSolver(ocp, json_file='acados_ocp.json')
     ocp_integrator = AcadosSimSolver(ocp, json_file='acados_ocp.json') 
+    # ocp_solver.cost_set(N-1, 'yref', np.array([0, 0]))
     
     # initialize control trajectory to all 0
     for i in range(N_SOLV):
@@ -151,9 +146,6 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, obstacles: List[Obstacle]
         xN = ocp_solver.get(N_SOLV, 'x')[0:2]
         subgoals = np.append(subgoals, xN.reshape((1, 2)), axis=0)
         
-        print(f"difference predicted next state vs. simulated next state: {x_ref - x0}")
-        print(type(x0))
-        
         # info on wether robot did or did not hit an obstacle:
         min_margin = np.inf
         for o in obstacles:
@@ -184,6 +176,11 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, obstacles: List[Obstacle]
             
         i += 1
         
+        if i == max_iter // 2:
+            # ocp_solver.cost_set(N-1, 'yref', np.array([0, 0]))
+            ocp_solver.cost_set(N_SOLV - 1, 'yref', np.array([4, 6, 0, 0, 0]))
+            print("set new y_ref")
+        
         # # some statistics
         # print(ocp_solver.get_stats('time_tot'))
     
@@ -192,6 +189,7 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, obstacles: List[Obstacle]
     print(simX[-1], (min_margin_traj <= 0), reached_goal)
     # print(subgoals)
     # # plot = plt.
+    print(f"reference value for final cost term: {ocp.cost.yref_e}")
     
     vis = VisStaticRobotEnv((-7.5, 7.5), (-7.5, 7.5), (0, 0), R_ROBOT, obstacles)
     vis.set_trajectory(simX[:,:2].T)

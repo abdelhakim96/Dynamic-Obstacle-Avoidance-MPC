@@ -2,9 +2,10 @@ import numpy as np
 from utils.visualization import Obstacle
 from models.world_specification import *
 
-def generate_random_obstacles(seed):
+def generate_random_obstacles(seed=None):
     # sample a grid
-    np.random.seed(seed)
+    if seed is not None:
+        np.random.seed(seed)
     x_coordinates = np.random.uniform(X_MIN_OBST, X_MAX_OBST, (N_OBST, 1))
     y_coordinates = np.random.uniform(Y_MIN_OBST, X_MAX_OBST, (N_OBST, 1))
     radius = np.random.uniform(R_MIN_OBST, R_MAX_OBST, (N_OBST, 1))
