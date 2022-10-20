@@ -21,8 +21,7 @@ def fan_in_uniform_init(tensor, fan_in=None):
 class Actor(nn.Module):
     def __init__(self, hidden_size, num_inputs, action_space):
         super(Actor, self).__init__()
-        self.action_space = action_space
-        num_outputs = action_space.shape[0]
+        num_outputs = action_space
 
         # Layer 1
         self.linear1 = nn.Linear(num_inputs, hidden_size[0])
@@ -66,8 +65,7 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     def __init__(self, hidden_size, num_inputs, action_space):
         super(Critic, self).__init__()
-        self.action_space = action_space
-        num_outputs = action_space.shape[0]
+        num_outputs = action_space
 
         # Layer 1
         self.linear1 = nn.Linear(num_inputs, hidden_size[0])
