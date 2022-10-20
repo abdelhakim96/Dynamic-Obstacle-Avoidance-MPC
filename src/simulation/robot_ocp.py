@@ -332,41 +332,23 @@ def solve_robot_ocp_open_loop(robot_init, robot_end, robot_radius, obstacles: Li
     
     
 if __name__ == '__main__':
-    robot_radius = 0.1
+    robot_radius = 0.2
     margin = 0.05
     
     # sa some obstacle grid
     N = 20
-    y_min = -6
-    y_max = 6
-    x_min = -6
-    x_max = 6
+    y_min = -5
+    y_max = 5
+    x_min = -5
+    x_max = 5
     r_min = 0.6
     r_max = 1.0
-    obstacles = generate_random_obstacles(N, x_min, x_max, y_min, y_max, r_min, r_max)
-    # obstacles = generate_regular_obstacle_grid(3, 3, x_min, x_max, y_min, y_max, r_min, r_max)
-    # # build a regular grid
-    # for i in range(N):
-    #     for j in range(N):
-    #         x = x_min + (i+0.5) * (x_max - x_min) / (N)
-    #         y = y_min + (j+0.5) * (y_max - y_min) / (N)
-    #         obstacles += [Obstacle(x, y, r)]
-    
-    # # sample a grid
-    # x_coordinates = np.random.uniform(x_min, x_max, (N, 1))
-    # y_coordinates = np.random.uniform(y_min, y_max, (N, 1))
-    # build a regular grid
-    # x_coordinates = np.array([[-3, 0, 3, -3, 0, 3]]).T
-    # y_coordinates = np.array([[-2, -2, -2, 2, 2, 2]]).T
-    # radius = np.random.uniform(0.4, 0.8, (N, 1))
-    # coordinates = np.hstack((x_coordinates, y_coordinates, radius))
-    # for coord in coordinates:
-    #     obstacles += [Obstacle(coord[0], coord[1], coord[2])]
-    
-    
-    print(obstacles)
-    solve_robot_ocp_closed_loop(np.array([-6, -6, np.pi / 4, 0, 0]),
-                                np.array([6, 6]),
-                                robot_radius,
-                                obstacles,
-                                margin)
+    for seed in range(10):
+            
+        obstacles = generate_random_obstacles(N, x_min, x_max, y_min, y_max, r_min, r_max, seed)
+        # obstacles = generate_regular_obstacle_grid(3, 3, x_min, x_max, y_min, y_max, r_min, r_max)
+        solve_robot_ocp_closed_loop(np.array([-3, -6, np.pi / 4, 0, 0]),
+                                    np.array([6, 6]),
+                                    robot_radius,
+                                    obstacles,
+                                    margin)
