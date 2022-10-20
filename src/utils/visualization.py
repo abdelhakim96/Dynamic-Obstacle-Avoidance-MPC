@@ -28,7 +28,7 @@ class VisStaticRobotEnv():
         for o in self._obstacles:
             self._ax.add_patch(o)
         self._robot_vis = plt.Circle(self._robot_pos_init, self._robot_size, fc='y')
-        self._traj_vis = plt.Line2D([], [])        
+        self._traj_vis = plt.Line2D([], [])
         self._ax.add_line(self._traj_vis)
         
     def _init_vis(self):
