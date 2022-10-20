@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch.optim import AdamW
 
 from models.NNs.ddpg_models import Actor, Critic
+from models.world_specification import X_MAX, X_MIN
 
 logger = logging.getLogger('ddpg')
 logger.setLevel(logging.INFO)
@@ -95,11 +96,11 @@ class DDPG(object):
             mu += noise
 
         # Clip the output according to the action space of the env
-        mu = mu.clamp(self.action_space.low[0], self.action_space.high[0])
+        mu = mu.clamp(X_MIN, X_MAX)
 
         return mu
 
-    def update_params(self, batch):
+    def update_params(self, state, action, reward, done, next_state):
         """
         Updates the parameters/networks of the agent according to the given batch.
         This means we ...
@@ -112,11 +113,11 @@ class DDPG(object):
             batch:  Batch to perform the training of the parameters
         """
         # Get tensors from the batch
-        state_batch = torch.cat(batch.state).to(device)
-        action_batch = torch.cat(batch.action).to(device)
-        reward_batch = torch.cat(batch.reward).to(device)
-        done_batch = torch.cat(batch.done).to(device)
-        next_state_batch = torch.cat(batch.next_state).to(device)
+        state_batch = state.to(device)
+        action_batch = action.to(device)
+        reward_batch = reward.to(device)
+        done_batch = done.to(device)
+        next_state_batch = next_state.to(device)
 
         # Get the actions and the state values to compute the targets
         next_action_batch = self.actor_target(next_state_batch)
