@@ -34,10 +34,29 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, obstacles: List[Obstacle]
     E_dot = 5 * np.eye(2)   # penalty on final speed (angular + translation)
     
     
-    ocp.cost.cost_type = 'EXTERNAL'
-    ocp.cost.cost_type_e = 'EXTERNAL'
-    ocp.model.cost_expr_ext_cost = model.u.T @ R @ model.u
-    ocp.model.cost_expr_ext_cost_e = (model.x[0:2] - robot_end).T @ E_pos @ (model.x[0:2] - robot_end) + model.x[3:].T @ E_dot @ model.x[3:]
+    # ocp.cost.cost_type = 'EXTERNAL'
+    # ocp.cost.cost_type_e = 'EXTERNAL'
+    # ocp.model.cost_expr_ext_cost = model.u.T @ R @ model.u
+    # ocp.model.cost_expr_ext_cost_e = (model.x[0:2] - robot_end).T @ E_pos @ (model.x[0:2] - robot_end) + model.x[3:].T @ E_dot @ model.x[3:]
+    
+    ocp.cost.cost_type = "LINEAR_LS"
+    ocp.cost.cost_type_e = "LINEAR_LS"
+    ocp.cost.Vx = np.zeros((nu, nx))
+    ocp.cost.Vu = np.eye(nu)
+    ocp.cost.yref = np.zeros(nu)
+    ocp.cost.Vx_0 = ocp.cost.Vx
+    ocp.cost.Vu_0 = ocp.cost.Vu
+    ocp.cost.yref_0 = ocp.cost.yref
+    ocp.cost.Vx_e = np.eye(nx)
+    ocp.cost.yref_e = np.hstack((robot_end.reshape(2), np.zeros(nx-2)))
+    ocp.cost.W = 2 * R
+    ocp.cost.W_0 = ocp.cost.W
+    # build the matrix for the terminal costs
+    W_e_1 = np.hstack((E_pos, np.zeros((2, nx - 2))))
+    W_e_2 = np.zeros((1, nx))
+    W_e_3 = np.hstack((np.zeros((2, nx - 2)), E_dot))
+    ocp.cost.W_e = 2* np.vstack((W_e_1, W_e_2, W_e_3))
+    print(ocp.cost.W_e)
     
     ## fix initial position
     ocp.constraints.x0 = robot_init
