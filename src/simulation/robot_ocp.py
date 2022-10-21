@@ -2,7 +2,7 @@ from acados_template.acados_model import AcadosModel
 from acados_template.acados_ocp import AcadosOcp
 from acados_template.acados_ocp_solver import AcadosOcpSolver
 from acados_template.acados_sim_solver import AcadosSimSolver
-
+import sys
 sys.path.append('../')
 from typing import List
 from models.robot_model import export_robot_ode_model
@@ -96,18 +96,18 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, obstacles: List[Obstacle]
         ocp.constraints.lh = np.array(h_lb)
         ocp.constraints.uh = np.array(h_ub)
         
-        # # allow for some slack, only penalize violations on lower bound
-        # # mixture of L1 and L2 penalty
-        # ocp.constraints.Jsh = np.eye(len(h))
-        # ocp.constraints.Jsh_e = np.eye(len(h))
-        # ocp.cost.Zl = np.zeros(len(h))
-        # ocp.cost.Zl_e = np.zeros(len(h))
-        # ocp.cost.Zu = np.zeros_like(ocp.cost.Zl)
-        # ocp.cost.Zu_e = np.zeros_like(ocp.cost.Zl_e)
-        # ocp.cost.zl = 100 * np.ones(len(h))
-        # ocp.cost.zl_e = 100 * np.ones(len(h))
-        # ocp.cost.zu = np.zeros(len(h))
-        # ocp.cost.zu_e = np.zeros(len(h))
+        # allow for some slack, only penalize violations on lower bound
+        # mixture of L1 and L2 penalty
+        ocp.constraints.Jsh = np.eye(len(h))
+        ocp.constraints.Jsh_e = np.eye(len(h))
+        ocp.cost.Zl = np.zeros(len(h))
+        ocp.cost.Zl_e = np.zeros(len(h))
+        ocp.cost.Zu = np.zeros_like(ocp.cost.Zl)
+        ocp.cost.Zu_e = np.zeros_like(ocp.cost.Zl_e)
+        ocp.cost.zl = 100 * np.ones(len(h))
+        ocp.cost.zl_e = 100 * np.ones(len(h))
+        ocp.cost.zu = np.zeros(len(h))
+        ocp.cost.zu_e = np.zeros(len(h))
     
     # configure solver
     ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
@@ -195,11 +195,6 @@ def solve_robot_ocp_closed_loop(robot_init, robot_end, obstacles: List[Obstacle]
         ocp_solver.set(N_SOLV-1, 'u', np.array([0, 0]))
             
         i += 1
-        
-        if i == max_iter // 2:
-            # ocp_solver.cost_set(N-1, 'yref', np.array([0, 0]))
-            ocp_solver.cost_set(N_SOLV - 1, 'yref', np.array([4, 6, 0, 0, 0]))
-            print("set new y_ref")
         
         # # some statistics
         # print(ocp_solver.get_stats('time_tot'))

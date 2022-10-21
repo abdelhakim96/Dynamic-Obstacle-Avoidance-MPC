@@ -1,7 +1,11 @@
+import imp
+import sys
+sys.path.append("../")
 from acados_template import AcadosModel
 from casadi import SX, vertcat, sin, cos
+from models.world_specification import R_ROBOT, MARGIN
 
-def export_robot_ode_model() -> AcadosModel:
+def export_robot_ode_model(obstacles=None) -> AcadosModel:
     
     model_name = 'robot_model'
     
@@ -50,6 +54,16 @@ def export_robot_ode_model() -> AcadosModel:
     model.u = u
     model.p = p
     model.name = model_name
+    
+    # avoid obstacles
+    if obstacles is not None and len(obstacles) > 0:
+        h = []
+        for o in obstacles:
+            h += [(model.x[0] - o.x)**2 + (model.x[1] - o.y)**2 - (o.r + R_ROBOT + MARGIN)**2]
+            # h_lb += []
+            # h_ub += [1e15]
+        
+        model.con_h_expr = vertcat(*h)
     
     return model
     

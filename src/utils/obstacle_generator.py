@@ -1,5 +1,8 @@
+print("entered obstacle_generator")
 import numpy as np
+print("imported numpy to obstacle_generator")
 from utils.visualization import Obstacle
+print("imported Obstacle to obstacle_generator")
 from models.world_specification import *
 
 def generate_random_obstacles(seed=None):

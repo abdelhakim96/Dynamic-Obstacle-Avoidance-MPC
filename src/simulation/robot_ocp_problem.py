@@ -1,18 +1,23 @@
 import sys
 sys.path.append('../')
-
 import numpy as np
 import casadi as ca
 from acados_template.acados_ocp import AcadosOcp
 from acados_template.acados_ocp_solver import AcadosOcpSolver
 from acados_template.acados_sim_solver import AcadosSimSolver
+print("imported AcadosSimSolver")
 from models.robot_model import export_robot_ode_model
-from utils.obstacle_generator import generate_random_obstacles
-from utils.visualization import VisStaticRobotEnv
 from models.world_specification import N_SOLV, TF, R_ROBOT, MARGIN, TOL
+print("imported export_robot_ode_model")
+from utils.obstacle_generator import generate_random_obstacles
+print("imported obstacle_generator")
+from utils.visualization import VisStaticRobotEnv
+
+print("really starting now")
 
 class RobotOcpProblem():
     def __init__(self, robot_init, robot_end, seed=None):
+        print('startet to set up solver')
         self.robot_init = robot_init
         self.robot_end = robot_end
         self.subgoal = self.robot_end
@@ -24,7 +29,7 @@ class RobotOcpProblem():
             self.obstacles = generate_random_obstacles()
         
         
-        self.model = export_robot_ode_model()
+        self.model = export_robot_ode_model(self.obstacles)
         self.nx = self.model.x.size()[0]
         self.nu = self.model.u.size()[0]
         self.R = 0.4 * np.eye(self.nu)
@@ -78,18 +83,18 @@ class RobotOcpProblem():
         self.ocp.constraints.idxbx = np.array([0, 1, 3, 4])
         
         # avoid obstacles
-        h = []
-        h_lb = []
-        h_ub = []
-        for o in self.obstacles:
-            h += [(self.model.x[0] - o.x)**2 + (self.model.x[1] - o.y)**2]
-            h_lb += [(o.r + R_ROBOT + MARGIN)**2]
-            h_ub += [1e15]
+        # h = []
+        # h_lb = []
+        # # h_ub = []
+        # for o in self.obstacles:
+        #     h += [(self.model.x[0] - o.x)**2 + (self.model.x[1] - o.y)**2]
+        #     h_lb += [(o.r + R_ROBOT + MARGIN)**2]
+        #     h_ub += [1e15]
         
-        if len(h) > 0:
-            self.model.con_h_expr = ca.vertcat(*h)
-            self.ocp.constraints.lh = np.array(h_lb)
-            self.ocp.constraints.uh = np.array(h_ub)
+        if self.obstacles is not None and len(self.obstacles) > 0:
+            # self.model.con_h_expr = ca.vertcat(*h)
+            self.ocp.constraints.lh = np.zeros(len(self.obstacles))
+            self.ocp.constraints.uh = 1e15 * np.ones(len(self.obstacles))
     
     def init_ocp_solver(self):
         # configure solver
@@ -170,9 +175,7 @@ class RobotOcpProblem():
                 
             i += 1
             
-            if i == max_iter // 2:
-                # ocp_solver.cost_set(N-1, 'yref', np.array([0, 0]))
-                print("set new y_ref")
+            print(f"margin to closes obstacle: {self.min_margin_traj}")            
             
             # # some statistics
             # print(ocp_solver.get_stats('time_tot'))
@@ -180,9 +183,10 @@ class RobotOcpProblem():
         print(f"Final difference to sub goal state: {self.simX[-1][0:2] - self.subgoal}")
         
         if visualize:
-            vis = VisStaticRobotEnv((-7.5, 7.5), (-7.5, 7.5), (0, 0), R_ROBOT, self.obstacles)
-            vis.set_trajectory(self.simX[:,:2].T)
-            vis.run_animation()
+            self.vis = VisStaticRobotEnv((-7.5, 7.5), (-7.5, 7.5), (0, 0), R_ROBOT, self.obstacles)
+            self.vis.set_trajectory(self.simX[:,:2].T)
+            self.vis.run_animation()
+            self.vis = None
         
         return self.simX[-1], (self.min_margin_traj <= 0), reached_subgoal
     
@@ -192,13 +196,17 @@ class RobotOcpProblem():
         """
         self.subgoal = np.array([x, y])
         self.ocp_solver.cost_set(N_SOLV, 'yref', np.array([x, y, 0, 0, 0]))
+        
+    # def clear_solver(self):
+    #     os.remove("./teset.txt")
 
     
 if __name__ == "__main__":
-    ocp_problem = RobotOcpProblem(np.array([-3, -6, np.pi / 4, 0, 0]), np.array([6, 6]), 0)
-    for i in range(1):
+    print("starting now")
+    ocp_problem = RobotOcpProblem(np.array([-3, -6, np.pi / 4, 0, 0]), np.array([6, 6]), 1)
+    for i in range(10):
         ocp_problem.step(20, True)
-    ocp_problem.set_subgoal(3, 6)
-    for i in range(1):
-        ocp_problem.step(20, True)
+    # ocp_problem.set_subgoal(3, 6)
+    # for i in range(2):
+    #     ocp_problem.step(20, True)
         

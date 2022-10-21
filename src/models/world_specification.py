@@ -28,6 +28,6 @@ X_MIN_OBST = Y_MIN_OBST
 X_MAX_OBST = Y_MAX_ROBOT
 
 # define timeframe and number of steps to simulate
-N_SOLV = 5
-TF = 0.5
+N_SOLV = 10
+TF = 1
 TOL = 0.1

@@ -1,7 +1,12 @@
+print("entered visualization")
 import numpy as np
+print("imported numpy to visualization")
 from matplotlib import pyplot as plt
+print("imported matplotlib for visualization")
 from matplotlib import animation
+print("imported animation for visualization")
 # from robot_sim import simulate_robot
+print("imported all for visualization")
 
 class Obstacle():
     def __init__(self, x_pos, y_pos, r) -> None:
