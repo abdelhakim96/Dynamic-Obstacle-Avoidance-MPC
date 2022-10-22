@@ -11,7 +11,7 @@ X_MAX = Y_MAX
 
 # define limits for start and end position of robot
 R_ROBOT = 0.2
-V_MAX_ROBOT = 20
+V_MAX_ROBOT = 5
 MARGIN = 0.1
 Y_MIN_ROBOT = Y_MIN + 1
 Y_MAX_ROBOT = - Y_MIN_ROBOT
@@ -22,9 +22,9 @@ X_MAX_ROBOT = Y_MAX_ROBOT
 N_OBST = 5
 R_MIN_OBST = 0.6
 R_MAX_OBST = 1.0
-R_OBST = 1.0
+R_OBST = 1
 # V_MAX_OBST = V_MAX_ROBOT / 4
-V_MAX_OBST = 0.5
+V_MAX_OBST = 0.8
 # define limits where obstacles can be placed
 Y_MIN_OBST = Y_MIN_ROBOT + R_MAX_OBST + 3 * R_ROBOT
 Y_MAX_OBST = - Y_MIN_ROBOT
@@ -32,6 +32,6 @@ X_MIN_OBST = Y_MIN_OBST
 X_MAX_OBST = Y_MAX_ROBOT
 
 # define timeframe and number of steps to simulate
-N_SOLV = 20
-TF = 2
+TF = 1
+N_SOLV = int(TF * 10)
 TOL = 0.1
