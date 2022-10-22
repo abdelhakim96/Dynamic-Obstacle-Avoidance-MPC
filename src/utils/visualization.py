@@ -30,6 +30,8 @@ class Obstacle():
             t_hit_x = (x - X_MIN) / abs(vx)
         elif vx > 0:
             t_hit_x = (X_MAX - x) / abs(vx)
+        else:
+            t_hit_x = np.inf
             
         if t_hit_x <= dt:
             x += (vx * t_hit_x - vx * (dt - t_hit_x))
@@ -41,6 +43,9 @@ class Obstacle():
             t_hit_y = (y - Y_MIN) / abs(vy)
         elif vy > 0:
             t_hit_y = (Y_MAX - y) / abs(vy)
+        else:
+            t_hit_y = np.inf
+        
         if t_hit_y <= dt:
             y += (vy * t_hit_y - vy * (dt - t_hit_y))
             vy = - vy
@@ -52,7 +57,7 @@ class Obstacle():
         """
             Returns x and y positions over the next n steps, starting at current obstacle position.
             Returns:
-                traj: of shape (n, 2)
+                traj: of shape (n+1, 2)
         """
         x = self.x
         vx = self.vy
@@ -136,16 +141,15 @@ class VisDynamicRobotEnv():
         self._ax.add_line(self._traj_vis)
         
     def _init_vis(self):
-        # self._ax.add_patch(self._robot_vis)
-        # return self._robot_vis,
-        return self._obstacles
+        self._ax.add_patch(self._robot_vis)
+        return [self._robot_vis] + [self._obstacles]
         
     def _animate(self, t):
-        # self._robot_vis.center = self._trajectory[:,t]
+        self._robot_vis.center = self._trajectory[:,t]
         for o, traj in zip(self._obstacles, self._obst_trajectories):
             o.center = traj[:,t]
         # return self._robot_vis,
-        return self._obstacles
+        return [self._robot_vis] + [self._obstacles]
     
     def run_animation(self):
         # self._anim = animation.FuncAnimation(self._fig, self._animate, 
@@ -153,7 +157,7 @@ class VisDynamicRobotEnv():
         #                                      frames=self._t_range, interval=50)
         self._anim = animation.FuncAnimation(self._fig, self._animate, 
                                              init_func=self._init_vis,
-                                             frames=800, interval=50)
+                                             frames=self._t_range, interval=50)
         plt.show()
     
     def show_env(self):

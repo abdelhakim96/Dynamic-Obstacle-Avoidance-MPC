@@ -3,7 +3,7 @@ import sys
 sys.path.append("../")
 from acados_template import AcadosModel
 from casadi import SX, vertcat, sin, cos
-from models.world_specification import R_ROBOT, MARGIN
+from models.world_specification import R_ROBOT, MARGIN, N_OBST, R_OBST
 
 def export_robot_ode_model(obstacles=None) -> AcadosModel:
     
@@ -33,7 +33,7 @@ def export_robot_ode_model(obstacles=None) -> AcadosModel:
     sdot = vertcat(xdot, ydot, psidot, vdot, omegadot)
     
     # parameters
-    p = []
+    p = SX.sym('p', 2 * N_OBST)
     
     # dynamics
     f_expl = vertcat(v * cos(psi),
@@ -56,14 +56,14 @@ def export_robot_ode_model(obstacles=None) -> AcadosModel:
     model.name = model_name
     
     # avoid obstacles
-    if obstacles is not None and len(obstacles) > 0:
-        h = []
-        for o in obstacles:
-            h += [(model.x[0] - o.x)**2 + (model.x[1] - o.y)**2 - (o.r + R_ROBOT + MARGIN)**2]
-            # h_lb += []
-            # h_ub += [1e15]
-        
-        model.con_h_expr = vertcat(*h)
+    # if obstacles is not None and len(obstacles) > 0:
+    h = []
+    for i in range(N_OBST):
+        h += [(model.x[0] - model.p[2*i])**2 + (model.x[1] - model.p[2*i+1])**2 - (R_OBST + R_ROBOT + MARGIN)**2]
+        # h_lb += []
+        # h_ub += [1e15]
+    
+    model.con_h_expr = vertcat(*h)
     
     return model
     
