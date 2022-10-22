@@ -11,6 +11,7 @@ X_MAX = Y_MAX
 
 # define limits for start and end position of robot
 R_ROBOT = 0.2
+V_MAX_ROBOT = 20
 MARGIN = 0.05
 Y_MIN_ROBOT = Y_MIN + 1
 Y_MAX_ROBOT = - Y_MIN_ROBOT
@@ -18,9 +19,11 @@ X_MIN_ROBOT = Y_MIN_ROBOT
 X_MAX_ROBOT = Y_MAX_ROBOT
 
 # fix number and shape of obstacles in the grid
-N_OBST = 25
+N_OBST = 20
 R_MIN_OBST = 0.6
 R_MAX_OBST = 1.0
+R_OBST = 1.0
+V_MAX_OBST = V_MAX_ROBOT / 2
 # define limits where obstacles can be placed
 Y_MIN_OBST = Y_MIN_ROBOT + R_MAX_OBST + 3 * R_ROBOT
 Y_MAX_OBST = - Y_MIN_ROBOT

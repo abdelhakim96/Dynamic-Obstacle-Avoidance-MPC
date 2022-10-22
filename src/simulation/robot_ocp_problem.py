@@ -5,19 +5,14 @@ import casadi as ca
 from acados_template.acados_ocp import AcadosOcp
 from acados_template.acados_ocp_solver import AcadosOcpSolver
 from acados_template.acados_sim_solver import AcadosSimSolver
-print("imported AcadosSimSolver")
 from models.robot_model import export_robot_ode_model
 from models.world_specification import N_SOLV, TF, R_ROBOT, MARGIN, TOL
-print("imported export_robot_ode_model")
 from utils.obstacle_generator import generate_random_obstacles
-print("imported obstacle_generator")
 from utils.visualization import VisStaticRobotEnv
 
-print("really starting now")
 
 class RobotOcpProblem():
     def __init__(self, robot_init, robot_end, seed=None):
-        print('startet to set up solver')
         self.robot_init = robot_init
         self.robot_end = robot_end
         self.subgoal = self.robot_end
@@ -203,7 +198,7 @@ class RobotOcpProblem():
     
 if __name__ == "__main__":
     print("starting now")
-    ocp_problem = RobotOcpProblem(np.array([-3, -6, np.pi / 4, 0, 0]), np.array([6, 6]), 1)
+    ocp_problem = RobotOcpProblem(np.array([-3, -6, np.pi / 4, 0, 0]), np.array([6, 6]), 0)
     for i in range(10):
         ocp_problem.step(20, True)
     # ocp_problem.set_subgoal(3, 6)
