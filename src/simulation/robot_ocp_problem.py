@@ -23,8 +23,8 @@ class RobotOcpProblem():
         self.nx = self.model.x.size()[0]
         self.nu = self.model.u.size()[0]
         self.R = 0.1 * np.eye(self.nu)
-        self.E_pos = 10 * np.eye(2)   # penalty on end position
-        # self.E_pos = 5 * np.eye(2)   # penalty on end position
+        # self.E_pos = 10 * np.eye(2)   # penalty on end position
+        self.E_pos = 5 * np.eye(2)   # penalty on end position
         self.E_dot = 5 * np.eye(2)   # penalty on final speed (angular + translation)
         
         self.init_experiment(seed, scenario, init_guess_when_error, random_move)
@@ -97,11 +97,15 @@ class RobotOcpProblem():
             self.ocp.constraints.Jsh = np.eye(len(self.obstacles))
             self.ocp.constraints.Jsh_e = np.eye(len(self.obstacles))
             # no L2 penalty on obstacle hits
+            # self.ocp.cost.Zl = np.ones(len(self.obstacles))
+            # self.ocp.cost.Zl_e = np.ones(len(self.obstacles))
             self.ocp.cost.Zl = np.zeros(len(self.obstacles))
             self.ocp.cost.Zl_e = np.zeros(len(self.obstacles))
-            # L1 penalty on hits
+            # # L1 penalty on hits
             self.ocp.cost.zl = 100 * np.ones(len(self.obstacles))
             self.ocp.cost.zl_e = 100 * np.ones(len(self.obstacles))
+            # self.ocp.cost.zl = 100 * np.zeros(len(self.obstacles))
+            # self.ocp.cost.zl_e = 100 * np.zeros(len(self.obstacles))
             # no penalty on violations of control constraints
             self.ocp.cost.Zu = np.zeros_like(self.ocp.cost.Zl)
             self.ocp.cost.Zu_e = np.zeros_like(self.ocp.cost.Zl_e)
@@ -127,14 +131,15 @@ class RobotOcpProblem():
             self.ocp_solver.set(i, 'u', np.array([0, 0]))
         
         if self.slack:
-            # scale by the distance to the obstacle
-            scale = 1000 * (np.linalg.norm((self.x0[:2] - self.subgoal), 2) + 1)
-            for i in range(N_SOLV+1):
-                alpha_i = scale * (N_SOLV - i) / N_SOLV
-                zl_i = alpha_i * np.ones(len(self.obstacles))
-                self.ocp_solver.cost_set(i, 'zl', zl_i)
+            self.parameterize_slack()
             
-            
+    def parameterize_slack(self):
+        scale = 1000 * (np.sum((self.x0[:2] - self.subgoal)**2) + 1)
+        for i in range(N_SOLV+1):
+            alpha_i = scale * (N_SOLV - i) / N_SOLV
+            zl_i = alpha_i * np.ones(len(self.obstacles))
+            self.ocp_solver.cost_set(i, 'zl', zl_i)
+    
     def parameterize_model(self):
         """
             Parameterize model based on predictions of obstacle positions over prediction horizon.
@@ -167,6 +172,8 @@ class RobotOcpProblem():
         while i < max_iter:
             # parameterize the solver according to current obstacle positions
             self.parameterize_model()
+            if self.slack:
+                self.parameterize_model()
 
             # set constraint on starting position (x0_bar)
             self.ocp_solver.set(0, 'ubx', self.x0)
@@ -274,11 +281,11 @@ class RobotOcpProblem():
         #     x_guess = self.x0[0] + i / (N_SOLV) * (self.x0[0] - self.x0[0])
         #     y_guess = self.x0[1] + i / (N_SOLV) * (self.subgoal[1] - self.x0[1])
         #     self.ocp_solver.set(i, 'x', np.array([x_guess, y_guess, psi_guess, 0, 0]))
+        x_guess = self.x0
+        x_guess[4:] = np.zeros(1)
         for i in range(N_SOLV + 1):
             if i < N_SOLV:
                 self.ocp_solver.set(i, 'u', np.zeros(2))
-            x_guess = self.x0
-            x_guess[4:] = np.zeros(1)
             # x_guess[3:] = np.zeros(2)
             self.ocp_solver.set(i, 'x', x_guess)
     
@@ -290,6 +297,6 @@ class RobotOcpProblem():
 if __name__ == "__main__":
     ocp_problem = RobotOcpProblem(np.array([X_MIN + 2, Y_MIN + 2, np.pi / 4, 0, 0]), np.array([X_MAX - 2, Y_MAX - 2]), 0, slack=True)
     for i in range(10):
-        ocp_problem.set_up_new_experiment(i, scenario='EDGE', init_guess_when_error=False, random_move=False)
+        ocp_problem.set_up_new_experiment(i, scenario='EDGE', init_guess_when_error=True, random_move=False)
         res = ocp_problem.step(400, True)
         
