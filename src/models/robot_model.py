@@ -5,7 +5,7 @@ from acados_template import AcadosModel
 from casadi import SX, vertcat, sin, cos
 from models.world_specification import R_ROBOT, MARGIN, N_OBST, R_OBST
 
-def export_robot_ode_model(obstacles=None) -> AcadosModel:
+def export_robot_ode_model() -> AcadosModel:
     
     model_name = 'robot_model'
     

@@ -16,7 +16,6 @@ class Obstacle():
         self.r = R_OBST
         
         self.traj = np.array([[x_pos, y_pos]])
-        print(self.traj.shape)
     
     def step(self):
         """ Moves obstacle according to its velocity and the time discretization defined globally for the problem."""
@@ -152,7 +151,7 @@ class VisDynamicRobotEnv():
         return [self._robot_vis] + [self._obstacles]
     
     def run_animation(self):
-        # self._anim = animation.FuncAnimation(self._fig, self._animate, 
+        # self._anim = animation.FuncAnimation(self._fig, self._gianimate, 
         #                                      init_func=self._init_vis,
         #                                      frames=self._t_range, interval=50)
         self._anim = animation.FuncAnimation(self._fig, self._animate, 
