@@ -14,7 +14,7 @@ from utils.visualization import VisDynamicRobotEnv
 
 
 class RobotOcpProblem():
-    def __init__(self, robot_init, robot_end, seed=None, scenario='RANDOM', slack=False, init_guess_when_error=False):
+    def __init__(self, robot_init, robot_end, seed=None, scenario='RANDOM', slack=True, init_guess_when_error=False, random_move=False):
         self.robot_init = robot_init
         self.robot_end = robot_end
         self.slack = slack
@@ -27,21 +27,21 @@ class RobotOcpProblem():
         self.E_pos = 5 * np.eye(2)   # penalty on end position
         self.E_dot = 5 * np.eye(2)   # penalty on final speed (angular + translation)
         
-        self.init_experiment(seed, scenario, init_guess_when_error)
+        self.init_experiment(seed, scenario, init_guess_when_error, random_move)
         
         # initialize ocp and the solver
         self.init_ocp()
         self.init_ocp_solver()
     
-    def init_experiment(self, seed, scenario, init_guess_when_error):
+    def init_experiment(self, seed, scenario, init_guess_when_error, random_move=False):
         self.subgoal = self.robot_end
         self.seed = seed
         self.init_guess_when_error = init_guess_when_error
         
         if self.seed is not None:
-            self.obstacles = generate_random_moving_obstacles(self.seed, scenario)
+            self.obstacles = generate_random_moving_obstacles(self.seed, scenario, random_move)
         else:
-            self.obstacles = generate_random_moving_obstacles()
+            self.obstacles = generate_random_moving_obstacles(scenario, random_move)
         # keeping track of robot position and trajectory
         self.simX = np.ndarray((0, self.nx))
         self.simU = np.ndarray((0, self.nu))
@@ -113,7 +113,7 @@ class RobotOcpProblem():
         self.ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
         # self.ocp.solver_options.hpipm_mode = 'ROBUST'
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
-        self.ocp.solver_options.levenberg_marquardt = 10.0
+        self.ocp.solver_options.levenberg_marquardt = 2.0
         self.ocp.solver_options.integrator_type = 'IRK'
         self.ocp.solver_options.nlp_solver_type = 'SQP_RTI'  # 'SQP_RTI'
         self.ocp.solver_options.tf = TF
@@ -238,7 +238,7 @@ class RobotOcpProblem():
             # print(ocp_solver.get_stats('time_tot'))
         
         print(f"Min margin to obstacle {self.min_margin_traj}")
-        # print(f"Final difference to sub goal state: {self.simX[-1][0:2] - self.subgoal}")
+        print(f"Final difference to sub goal state: {np.linalg.norm((self.simX[-1][0:2] - self.subgoal))}")
         # print(f"left bounds: {out_of_bounds}")
         # print(f"Ran into error: {ran_into_error}")
         
@@ -281,18 +281,14 @@ class RobotOcpProblem():
             # x_guess[3:] = np.zeros(2)
             self.ocp_solver.set(i, 'x', x_guess)
     
-    def set_up_new_experiment(self, seed=None, scenario='RANDOM', init_guess_when_error=False):
+    def set_up_new_experiment(self, seed=None, scenario='RANDOM', init_guess_when_error=False, random_move=False):
         self.ocp_solver.reset()
-        self.init_experiment(seed, scenario, init_guess_when_error)
-        
-            
-        
-            
+        self.init_experiment(seed, scenario, init_guess_when_error, random_move)
 
     
 if __name__ == "__main__":
     ocp_problem = RobotOcpProblem(np.array([X_MIN + 2, Y_MIN + 2, np.pi / 4, 0, 0]), np.array([X_MAX - 2, Y_MAX - 2]), 0, slack=True)
     for i in range(10):
-        ocp_problem.set_up_new_experiment(i, scenario='RANDOM', init_guess_when_error=False)
+        ocp_problem.set_up_new_experiment(i, scenario='EDGE', init_guess_when_error=False, random_move=False)
         res = ocp_problem.step(400, True)
         
