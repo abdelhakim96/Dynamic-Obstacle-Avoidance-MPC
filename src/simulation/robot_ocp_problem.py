@@ -23,8 +23,8 @@ class RobotOcpProblem():
         self.nx = self.model.x.size()[0]
         self.nu = self.model.u.size()[0]
         self.R = 0.1 * np.eye(self.nu)
-        # self.E_pos = 10 * np.eye(2)   # penalty on end position
-        self.E_pos = 5 * np.eye(2)   # penalty on end position
+        self.E_pos = 10 * np.eye(2)   # penalty on end position
+        # self.E_pos = 5 * np.eye(2)   # penalty on end position
         self.E_dot = 5 * np.eye(2)   # penalty on final speed (angular + translation)
         
         self.init_experiment(seed, scenario, init_guess_when_error, random_move)
@@ -218,7 +218,8 @@ class RobotOcpProblem():
             
             # compute the norm of the state vector (excluding the orientation which we do not consider)
             # in case we are within the tolerance end the closed loop simulation
-            distance_to_goal = np.linalg.norm(np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, [0, 0]))
+            # distance_to_goal = np.linalg.norm(np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, [0, 0]))
+            distance_to_goal = np.linalg.norm((self.x0[:2] - self.subgoal))
             if distance_to_goal <= TOL:
                 reached_subgoal = True
                 break

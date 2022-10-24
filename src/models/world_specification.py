@@ -19,7 +19,7 @@ X_MIN_ROBOT = Y_MIN_ROBOT
 X_MAX_ROBOT = Y_MAX_ROBOT
 
 # fix number and shape of obstacles in the grid
-N_OBST = 5
+N_OBST = 7
 R_MIN_OBST = 0.6
 R_MAX_OBST = 1.0
 R_OBST = 1
