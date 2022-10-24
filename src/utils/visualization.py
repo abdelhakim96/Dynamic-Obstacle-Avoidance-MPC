@@ -4,26 +4,34 @@ from matplotlib import animation
 import sys
 sys.path.append('../')
 
-from models.world_specification import R_OBST, R_ROBOT, N_SOLV, TF, X_MIN, X_MAX, Y_MIN, Y_MAX
+from models.world_specification import R_OBST, R_ROBOT, N_SOLV, TF, V_MAX_OBST, X_MIN, X_MAX, Y_MIN, Y_MAX, RANDOMNESS
 # from robot_sim import simulate_robot
 
 class Obstacle():
-    def __init__(self, x_pos, y_pos, vx, vy) -> None:
+    def __init__(self, x_pos, y_pos, vx, vy, random_move=False, seed=None) -> None:
         self.x = x_pos
         self.y = y_pos
         self.vx = vx
         self.vy = vy
         self.r = R_OBST
-        
+        self.random_move = random_move
+        self.seed = seed
         self.traj = np.array([[x_pos, y_pos]])
     
     def step(self):
         """ Moves obstacle according to its velocity and the time discretization defined globally for the problem."""
-        self.x, self.vx, self.y, self.vy = self.predict_step(self.x, self.vx, self.y, self.vy)
+        self.x, self.vx, self.y, self.vy = self.predict_step(self.x, self.vx, self.y, self.vy, noise=True)
         self.traj = np.append(self.traj, np.array([[self.x, self.y]]), axis=0)
         
-    def predict_step(self, x, vx, y, vy):
+    def predict_step(self, x, vx, y, vy, noise=False):
         dt = TF / N_SOLV
+        
+        if self.random_move:
+            # add some gaussian noise to the motion, relative to the current velocity.
+            # at same time make sure velocity or obstacles stays within specification.
+            np.random.seed(self.seed)
+            vx = min(max((1 + RANDOMNESS * np.random.normal()) * vx, - V_MAX_OBST), V_MAX_OBST)
+            vy = min(max((1 + RANDOMNESS * np.random.normal()) * vy, - V_MAX_OBST), V_MAX_OBST)
 
         if vx < 0:
             t_hit_x = (x - X_MIN) / abs(vx)
@@ -67,7 +75,7 @@ class Obstacle():
         traj[0] = [x, y]
         
         for i in range(n):
-            x, vx, y, vy = self.predict_step(x, vx, y, vy)
+            x, vx, y, vy = self.predict_step(x, vx, y, vy, noise=False)
             traj[i+1] = [x, y]
         return traj
             

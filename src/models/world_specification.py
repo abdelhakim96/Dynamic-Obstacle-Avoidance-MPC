@@ -24,8 +24,9 @@ R_MIN_OBST = 0.6
 R_MAX_OBST = 1.0
 R_OBST = 1
 V_MAX_OBST = V_MAX_ROBOT / 8
+RANDOMNESS = 0.1
 # V_MAX_OBST = 0.5
-MARGIN = 0.2 * V_MAX_OBST
+MARGIN = 2 * RANDOMNESS * V_MAX_OBST
 # define limits where obstacles can be placed
 Y_MIN_OBST = Y_MIN_ROBOT + R_MAX_OBST + 3 * R_ROBOT
 Y_MAX_OBST = - Y_MIN_ROBOT
