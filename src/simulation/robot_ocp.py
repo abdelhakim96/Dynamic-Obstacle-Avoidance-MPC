@@ -2,6 +2,7 @@ from acados_template.acados_model import AcadosModel
 from acados_template.acados_ocp import AcadosOcp
 from acados_template.acados_ocp_solver import AcadosOcpSolver
 from acados_template.acados_sim_solver import AcadosSimSolver
+import sys
 
 sys.path.append('../')
 from typing import List
