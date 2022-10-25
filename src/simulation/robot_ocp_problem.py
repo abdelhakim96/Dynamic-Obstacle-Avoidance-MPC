@@ -22,7 +22,7 @@ class RobotOcpProblem():
         self.model = export_robot_ode_model()
         self.nx = self.model.x.size()[0]
         self.nu = self.model.u.size()[0]
-        self.R = 0.1 * np.eye(self.nu)
+        self.R = 0.4 * np.eye(self.nu)
         # self.E_pos = 10 * np.eye(2)   # penalty on end position
         self.E_pos = 5 * np.eye(2)   # penalty on end position
         self.E_dot = 5 * np.eye(2)   # penalty on final speed (angular + translation)
@@ -97,15 +97,15 @@ class RobotOcpProblem():
             self.ocp.constraints.Jsh = np.eye(len(self.obstacles))
             self.ocp.constraints.Jsh_e = np.eye(len(self.obstacles))
             # no L2 penalty on obstacle hits
-            # self.ocp.cost.Zl = np.ones(len(self.obstacles))
-            # self.ocp.cost.Zl_e = np.ones(len(self.obstacles))
-            self.ocp.cost.Zl = np.zeros(len(self.obstacles))
-            self.ocp.cost.Zl_e = np.zeros(len(self.obstacles))
+            self.ocp.cost.Zl = np.ones(len(self.obstacles))
+            self.ocp.cost.Zl_e = np.ones(len(self.obstacles))
+            # self.ocp.cost.Zl = np.zeros(len(self.obstacles))
+            # self.ocp.cost.Zl_e = np.zeros(len(self.obstacles))
             # # L1 penalty on hits
-            self.ocp.cost.zl = 100 * np.ones(len(self.obstacles))
-            self.ocp.cost.zl_e = 100 * np.ones(len(self.obstacles))
-            # self.ocp.cost.zl = 100 * np.zeros(len(self.obstacles))
-            # self.ocp.cost.zl_e = 100 * np.zeros(len(self.obstacles))
+            # self.ocp.cost.zl = np.ones(len(self.obstacles))
+            # self.ocp.cost.zl_e = np.ones(len(self.obstacles))
+            self.ocp.cost.zl = np.zeros(len(self.obstacles))
+            self.ocp.cost.zl_e = np.zeros(len(self.obstacles))
             # no penalty on violations of control constraints
             self.ocp.cost.Zu = np.zeros_like(self.ocp.cost.Zl)
             self.ocp.cost.Zu_e = np.zeros_like(self.ocp.cost.Zl_e)
@@ -134,11 +134,14 @@ class RobotOcpProblem():
             self.parameterize_slack()
             
     def parameterize_slack(self):
-        scale = 1000 * (np.sum((self.x0[:2] - self.subgoal)**2) + 1)
+        # scale = 1e4 * (np.sum((self.x0[:2] - self.subgoal)**2) + 50)
+        # scale = 1e4 * (np.sum((np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, np.zeros(2)))**2) + 50)
+        scale = 500 * (2 * np.sum((np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, np.zeros(2)))**2) + 50)
         for i in range(N_SOLV+1):
             alpha_i = scale * (N_SOLV - i) / N_SOLV
-            zl_i = alpha_i * np.ones(len(self.obstacles))
-            self.ocp_solver.cost_set(i, 'zl', zl_i)
+            # zl_i = alpha_i * np.ones(len(self.obstacles))
+            Zl_i = alpha_i * np.ones(len(self.obstacles))
+            self.ocp_solver.cost_set(i, 'Zl', Zl_i)
     
     def parameterize_model(self):
         """
@@ -173,7 +176,7 @@ class RobotOcpProblem():
             # parameterize the solver according to current obstacle positions
             self.parameterize_model()
             if self.slack:
-                self.parameterize_model()
+                self.parameterize_slack()
 
             # set constraint on starting position (x0_bar)
             self.ocp_solver.set(0, 'ubx', self.x0)
@@ -184,15 +187,18 @@ class RobotOcpProblem():
             stat_solv = self.ocp_solver.solve()
             # print(f"Solver status: {stat_solv}")
             # self.ocp_solver.store_iterate(f"logs/logs_stage_{i}_solv_state_{stat_solv}.json")
-            if stat_solv in [4]:
-                ran_into_error = True
-                if self.init_guess_when_error:
-                    self.set_initial_guess()
             # self.ocp_solver.print_statistics()
             
             
             # simulate model from current position and computed control
             u = self.ocp_solver.get(0, 'u')
+            
+            # if solver ran into error reset initial guess after getting the last control
+            if stat_solv in [4]:
+                ran_into_error = True
+                if self.init_guess_when_error:
+                    self.set_initial_guess()
+                    
             self.ocp_integrator.set('x', self.x0)
             self.ocp_integrator.set('u', u)
             self.ocp_integrator.solve()
@@ -251,6 +257,7 @@ class RobotOcpProblem():
         # print(f"Ran into error: {ran_into_error}")
         
         if visualize:
+            print(f"Visualizing seed {self.seed}")
             self.vis = VisDynamicRobotEnv(self.obstacles)
             self.vis.set_trajectory(self.simX[:,:2].T)
             self.vis.set_obst_trajectory([o.get_trajectory().T for o in self.obstacles])
@@ -273,7 +280,7 @@ class RobotOcpProblem():
         """
         self.ocp_solver.reset()
         
-        ### straight line guess, not so successfull 
+        # ## straight line guess, not so successfull 
         # psi_guess = np.arctan2(self.subgoal[1] - self.x0[1], self.subgoal[0] - self.subgoal[0])
         # for i in range(N_SOLV + 1):
         #     if i < N_SOLV:

@@ -4,7 +4,7 @@ from matplotlib import animation
 import sys
 sys.path.append('../')
 
-from models.world_specification import R_OBST, R_ROBOT, N_SOLV, TF, V_MAX_OBST, X_MIN, X_MAX, Y_MIN, Y_MAX, RANDOMNESS
+from models.world_specification import R_OBST, R_ROBOT, N_SOLV, TF, V_MAX_OBST, X_MIN, X_MAX, Y_MIN, Y_MAX, RANDOMNESS, TOL
 # from robot_sim import simulate_robot
 
 class Obstacle():
@@ -144,6 +144,8 @@ class VisDynamicRobotEnv():
         for o in self._obstacles:
             self._ax.add_patch(o)
         self._robot_vis = plt.Circle((0, 0), R_ROBOT, fc='y')
+        self._ax.add_patch(plt.Circle((X_MIN + 2, Y_MIN + 2), TOL, fill=False, edgecolor='orange'))
+        self._ax.add_patch(plt.Circle((X_MAX - 2, Y_MAX - 2), TOL, fill=False, edgecolor='g'))
         self._traj_vis = plt.Line2D([], [])
         self._ax.add_line(self._traj_vis)
         
