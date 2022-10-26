@@ -24,9 +24,11 @@ class RobotOcpProblem():
         self.nx = self.model.x.size()[0]
         self.nu = self.model.u.size()[0]
         self.R = 0.4 * np.eye(self.nu)
+        self.Q = 1 * np.eye(4)
+        self.Q_e = 5 * np.eye(4)
         # self.E_pos = 10 * np.eye(2)   # penalty on end position
-        self.E_pos = 5 * np.eye(2)   # penalty on end position
-        self.E_dot = 5 * np.eye(2)   # penalty on final speed (angular + translation)
+        # self.E_pos = 5 * np.eye(2)   # penalty on end position
+        # self.E_dot = 5 * np.eye(2)   # penalty on final speed (angular + translation)
         
         self.init_experiment(seed, scenario, init_guess_when_error, random_move, show_pred)
         
@@ -64,21 +66,28 @@ class RobotOcpProblem():
         ## setup ocp cost
         self.ocp.cost.cost_type = "LINEAR_LS"
         self.ocp.cost.cost_type_e = "LINEAR_LS"
-        self.ocp.cost.Vx = np.zeros((self.nu, self.nx))
-        self.ocp.cost.Vu = np.eye(self.nu)
-        self.ocp.cost.yref = np.zeros(self.nu)
+        
+        # build Vx
+        self.ocp.cost.Vx = np.zeros((self.nx + self.nu - 1, self.nx))
+        self.ocp.cost.Vx[:2,:2] = np.eye(2)
+        self.ocp.cost.Vx[2:4,3:] = np.eye(2)
+        self.ocp.cost.Vu = np.zeros((self.nx + self.nu - 1, self.nu))
+        self.ocp.cost.Vu[-2:] = np.eye(self.nu)
+        # self.ocp.cost.yref = np.vstack((self.robot_end.reshape((self.nx - 1,1)), np.zeros((self.nu,1))))
+        self.ocp.cost.yref = np.hstack((self.robot_end.reshape(2), np.zeros(4)))
         self.ocp.cost.Vx_0 = self.ocp.cost.Vx
         self.ocp.cost.Vu_0 = self.ocp.cost.Vu
         self.ocp.cost.yref_0 = self.ocp.cost.yref
-        self.ocp.cost.Vx_e = np.eye(self.nx)
-        self.ocp.cost.yref_e = np.hstack((self.robot_end.reshape(2), np.zeros(self.nx-2)))
-        self.ocp.cost.W = 2 * self.R
+        self.ocp.cost.Vx_e = np.zeros((self.nx - 1, self.nx))
+        self.ocp.cost.Vx_e[:2, :2] = np.eye(2)
+        self.ocp.cost.Vx_e[-2:, -2:] = np.eye(2)
+        self.ocp.cost.yref_e = np.hstack((self.robot_end.reshape(2), np.zeros(2)))
+        self.ocp.cost.W = np.zeros((self.nx - 1 + self.nu, self.nx - 1 + self.nu))
+        self.ocp.cost.W[:4, :4] = self.Q
+        self.ocp.cost.W[-2:, -2:] = self.R
         self.ocp.cost.W_0 = self.ocp.cost.W
         # build the matrix for the terminal costs
-        W_e_1 = np.hstack((self.E_pos, np.zeros((2, self.nx - 2))))
-        W_e_2 = np.zeros((1, self.nx))
-        W_e_3 = np.hstack((np.zeros((2, self.nx - 2)), self.E_dot))
-        self.ocp.cost.W_e = 2* np.vstack((W_e_1, W_e_2, W_e_3))
+        self.ocp.cost.W_e = self.Q_e
         
         ## setup ocp constraints
         # fix initial position
@@ -89,14 +98,16 @@ class RobotOcpProblem():
         self.ocp.constraints.lbx = np.array([-7, -7, -V_MAX_ROBOT, -V_MAX_ROBOT])
         self.ocp.constraints.ubx = np.array([7, 7, V_MAX_ROBOT, V_MAX_ROBOT])
         self.ocp.constraints.idxbx = np.array([0, 1, 3, 4])
-        # self.ocp.constraints.lbu = np.array([-C_MAX, -C_MAX])
-        # self.ocp.constraints.ubu = np.array([C_MAX, C_MAX])
-        # self.ocp.constraints.idxbu = np.array([0, 1])
+        
+        self.ocp.constraints.lbu = np.array([-C_MAX, -C_MAX])
+        self.ocp.constraints.ubu = np.array([C_MAX, C_MAX])
+        self.ocp.constraints.idxbu = np.array([0, 1])
 
         if self.obstacles is not None and len(self.obstacles) > 0:
-            # self.model.con_h_expr = ca.vertcat(*h)
             self.ocp.constraints.lh = np.zeros(len(self.obstacles))
-            self.ocp.constraints.uh = 1e15 * np.ones(len(self.obstacles))
+            self.ocp.constraints.uh = 1e5 * np.ones(len(self.obstacles))
+            self.ocp.constraints.lh_e = np.zeros(len(self.obstacles))
+            self.ocp.constraints.uh_e = 1e5 * np.ones(len(self.obstacles))
         self.ocp.parameter_values = np.zeros(2*N_OBST)
         
         if self.slack:
@@ -107,10 +118,10 @@ class RobotOcpProblem():
             # self.ocp.constraints.Jbu = np.zeros(len(self.obstacles))
             # self.ocp.constraints.Jsbu = np.eye(len(self.obstacles))
             # no L2 penalty on obstacle hits
-            # self.ocp.cost.Zl = np.ones(len(self.obstacles))
-            # self.ocp.cost.Zl_e = np.ones(len(self.obstacles))
-            self.ocp.cost.Zl = np.zeros(len(self.obstacles))
-            self.ocp.cost.Zl_e = np.zeros(len(self.obstacles))
+            self.ocp.cost.Zl = np.ones(len(self.obstacles))
+            self.ocp.cost.Zl_e = np.ones(len(self.obstacles))
+            # self.ocp.cost.Zl = np.zeros(len(self.obstacles))
+            # self.ocp.cost.Zl_e = np.zeros(len(self.obstacles))
             # # L1 penalty on hits
             # self.ocp.cost.zl = np.ones(len(self.obstacles))
             # self.ocp.cost.zl_e = np.ones(len(self.obstacles))
@@ -125,8 +136,6 @@ class RobotOcpProblem():
     def init_ocp_solver(self):
         # configure solver
         self.ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
-        # self.ocp.solver_options.qp_solver = 'FULL_CONDENSING_QPOASES'
-        # self.ocp.solver_options.hpipm_mode = 'ROBUST'
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
         self.ocp.solver_options.levenberg_marquardt = 2.0
         self.ocp.solver_options.integrator_type = 'IRK'
@@ -148,6 +157,7 @@ class RobotOcpProblem():
         # scale = 1e4 * (np.sum((self.x0[:2] - self.subgoal)**2) + 50)
         # scale = 1e4 * (np.sum((np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, np.zeros(2)))**2) + 50)
         scale = 500 * (2 * np.sum((np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, np.zeros(2)))**2) + 50)
+        # for i in range(N_SOLV+1):
         for i in range(N_SOLV+1):
             alpha_i = scale * (N_SOLV - i) / N_SOLV
             # zl_i = alpha_i * np.ones(len(self.obstacles))
@@ -197,10 +207,10 @@ class RobotOcpProblem():
             # solve the ocp for the new starting position and get control for next step
             # print(f"\n\nRUNNING STAGE {i+1}")
             stat_solv = self.ocp_solver.solve()
-            print(f"Solver status: {stat_solv}")
+            # print(f"Solver status: {stat_solv}")
             # self.ocp_solver.store_iterate(f"logs/logs_stage_{i}_solv_state_{stat_solv}.json")
             # self.ocp_solver.print_statistics()
-            
+            # print(f"constraints on u {self.ocp_solver.get(4, 'lbu')}")
             
             # simulate model from current position and computed control
             u = self.ocp_solver.get(0, 'u')
@@ -326,6 +336,6 @@ class RobotOcpProblem():
 if __name__ == "__main__":
     ocp_problem = RobotOcpProblem(np.array([X_MIN + 2, Y_MIN + 2, np.pi / 4, 0, 0]), np.array([X_MAX - 2, Y_MAX - 2]), 0, slack=True)
     for i in range(10):
-        ocp_problem.set_up_new_experiment(i, scenario='RANDOM', init_guess_when_error=True, random_move=False, show_pred=True)
+        ocp_problem.set_up_new_experiment(i, scenario='RANDOM', init_guess_when_error=True, random_move=True, show_pred=True)
         res = ocp_problem.step(200, True)
         

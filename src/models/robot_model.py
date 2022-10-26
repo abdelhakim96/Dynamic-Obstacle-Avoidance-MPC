@@ -60,10 +60,9 @@ def export_robot_ode_model() -> AcadosModel:
     h = []
     for i in range(N_OBST):
         h += [(model.x[0] - model.p[2*i])**2 + (model.x[1] - model.p[2*i+1])**2 - (R_OBST + R_ROBOT + MARGIN)**2]
-        # h_lb += []
-        # h_ub += [1e15]
     
     model.con_h_expr = vertcat(*h)
+    model.con_h_expr_e = vertcat(*h)
     
     return model
     

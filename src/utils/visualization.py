@@ -4,7 +4,7 @@ from matplotlib import animation
 import sys
 sys.path.append('../')
 
-from models.world_specification import R_OBST, R_ROBOT, N_SOLV, TF, V_MAX_OBST, X_MIN, X_MAX, Y_MIN, Y_MAX, RANDOMNESS, TOL
+from models.world_specification import R_OBST, R_ROBOT, N_SOLV, TF, V_MAX_OBST, X_MIN, X_MAX, Y_MIN, Y_MAX, RANDOMNESS, TOL, N_OBST
 # from robot_sim import simulate_robot
 
 class Obstacle():
@@ -30,8 +30,10 @@ class Obstacle():
             # add some gaussian noise to the motion, relative to the current velocity.
             # at same time make sure velocity or obstacles stays within specification.
             np.random.seed(self.seed)
-            vx = min(max((1 + RANDOMNESS * np.random.normal()) * vx, - V_MAX_OBST), V_MAX_OBST)
-            vy = min(max((1 + RANDOMNESS * np.random.normal()) * vy, - V_MAX_OBST), V_MAX_OBST)
+            self.seed = self.seed + N_OBST   # use another seed for randomness next time
+            noise_vx, noise_vy = np.random.normal(size=2)
+            vx = min(max((1 + RANDOMNESS * noise_vx) * vx, - V_MAX_OBST), V_MAX_OBST)
+            vy = min(max((1 + RANDOMNESS * noise_vy) * vy, - V_MAX_OBST), V_MAX_OBST)
 
         if vx < 0:
             t_hit_x = (x - X_MIN) / abs(vx)
