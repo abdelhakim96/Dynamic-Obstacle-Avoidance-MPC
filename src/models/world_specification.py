@@ -18,6 +18,9 @@ Y_MAX_ROBOT = - Y_MIN_ROBOT
 X_MIN_ROBOT = Y_MIN_ROBOT
 X_MAX_ROBOT = Y_MAX_ROBOT
 
+# define limits on controls
+C_MAX = 1e4
+
 # fix number and shape of obstacles in the grid
 N_OBST = 5
 R_MIN_OBST = 0.6

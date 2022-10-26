@@ -85,51 +85,6 @@ class Obstacle():
     def get_trajectory(self):
         return self.traj
 
-class VisStaticRobotEnv():
-    def __init__(self, xlim, ylim, robot_pos, robot_size, obstacles):
-        self._xlim = xlim
-        self._ylim = ylim
-        self._robot_pos_init = robot_pos
-        self._robot_size = robot_size
-        self._obstacles = []
-        self._t_range = 0
-        for o in obstacles:
-            self._obstacles += [o.get_vis()]
-        self._fig = plt.figure()
-        self._ax = plt.axes(xlim=self._xlim, ylim=self._ylim)
-        self._ax.set_aspect('equal')
-        for o in self._obstacles:
-            self._ax.add_patch(o)
-        self._robot_vis = plt.Circle(self._robot_pos_init, self._robot_size, fc='y')
-        self._traj_vis = plt.Line2D([], [])
-        self._ax.add_line(self._traj_vis)
-        
-    def _init_vis(self):
-        self._ax.add_patch(self._robot_vis)
-        return self._robot_vis,
-        
-    def _animate(self, t):
-        self._robot_vis.center = self._trajectory[:,t]
-        return self._robot_vis,
-    
-    def run_animation(self):
-        self._anim = animation.FuncAnimation(self._fig, self._animate, 
-                                             init_func=self._init_vis,
-                                             frames=self._t_range, interval=20)
-        plt.show()
-    
-    def show_env(self):
-        plt.show()
-    
-    def set_trajectory(self, traj):
-        """
-            Args:
-                traj: array of shape (2, N+1)
-        """
-        self._trajectory = traj
-        self._t_range = self._trajectory.shape[1]
-        self._traj_vis.set_data(self._trajectory[0,:], self._trajectory[1,:])
-
 class VisDynamicRobotEnv():
     def __init__(self, obstacles):
         self._xlim = (X_MIN, X_MAX)
@@ -147,18 +102,21 @@ class VisDynamicRobotEnv():
         self._ax.add_patch(plt.Circle((X_MIN + 2, Y_MIN + 2), TOL, fill=False, edgecolor='orange'))
         self._ax.add_patch(plt.Circle((X_MAX - 2, Y_MAX - 2), TOL, fill=False, edgecolor='g'))
         self._traj_vis = plt.Line2D([], [])
+        self._traj_vis_pred = plt.Line2D([], [], c='y')
         self._ax.add_line(self._traj_vis)
+        self._ax.add_line(self._traj_vis_pred)
         
     def _init_vis(self):
         self._ax.add_patch(self._robot_vis)
-        return [self._robot_vis] + [self._obstacles]
+        return [self._robot_vis] + [self._obstacles] + [self._traj_vis_pred]
         
     def _animate(self, t):
         self._robot_vis.center = self._trajectory[:,t]
+        self._traj_vis_pred.set_data(self._pred_traj[t,:,0], self._pred_traj[t,:,1])
         for o, traj in zip(self._obstacles, self._obst_trajectories):
             o.center = traj[:,t]
         # return self._robot_vis,
-        return [self._robot_vis] + [self._obstacles]
+        return [self._robot_vis] + [self._obstacles] + [self._traj_vis_pred]
     
     def run_animation(self):
         # self._anim = animation.FuncAnimation(self._fig, self._gianimate, 
@@ -180,6 +138,9 @@ class VisDynamicRobotEnv():
         self._trajectory = traj
         self._t_range = self._trajectory.shape[1]
         self._traj_vis.set_data(self._trajectory[0,:], self._trajectory[1,:])
+    
+    def set_pred_trajectories(self, pred_traj):
+        self._pred_traj = pred_traj
     
     def set_obst_trajectory(self, trajectories):
         self._obst_trajectories = trajectories
