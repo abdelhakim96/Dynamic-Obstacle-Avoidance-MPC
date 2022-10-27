@@ -1,9 +1,6 @@
 import sys
-from termios import N_PPP
-from tkinter import N
 sys.path.append('../')
 import numpy as np
-import casadi as ca
 from acados_template.acados_ocp import AcadosOcp
 from acados_template.acados_ocp_solver import AcadosOcpSolver
 from acados_template.acados_sim_solver import AcadosSimSolver
@@ -14,7 +11,7 @@ from utils.visualization import VisDynamicRobotEnv
 
 
 class RobotOcpProblem():
-    def __init__(self, robot_init, robot_end, seed=None, scenario='RANDOM', slack=True, init_guess_when_error=False, random_move=False, show_pred=False):
+    def __init__(self, robot_init, robot_end, scenario='RANDOM', slack=True, init_guess_when_error=False, random_move=False, show_pred=False):
         self.robot_init = robot_init
         self.robot_end = robot_end
         self.slack = slack
@@ -23,28 +20,24 @@ class RobotOcpProblem():
         self.model = export_robot_ode_model()
         self.nx = self.model.x.size()[0]
         self.nu = self.model.u.size()[0]
+        # costs on controls
         self.R = 0.4 * np.eye(self.nu)
-        self.Q = 1 * np.eye(4)
+        # cost on distance to goal
+        self.Q = 1.5 * np.eye(4)
         self.Q_e = 5 * np.eye(4)
-        # self.E_pos = 10 * np.eye(2)   # penalty on end position
-        # self.E_pos = 5 * np.eye(2)   # penalty on end position
-        # self.E_dot = 5 * np.eye(2)   # penalty on final speed (angular + translation)
         
-        self.init_experiment(seed, scenario, init_guess_when_error, random_move, show_pred)
+        self.init_experiment(scenario, init_guess_when_error, random_move, show_pred)
         
         # initialize ocp and the solver
         self.init_ocp()
         self.init_ocp_solver()
     
-    def init_experiment(self, seed, scenario, init_guess_when_error, random_move=False, show_pred=False):
+    def init_experiment(self, scenario, init_guess_when_error, random_move=False, show_pred=False):
         self.subgoal = self.robot_end
-        self.seed = seed
         self.init_guess_when_error = init_guess_when_error
         self.show_pred = show_pred
-        if self.seed is not None:
-            self.obstacles = generate_random_moving_obstacles(self.seed, scenario, random_move)
-        else:
-            self.obstacles = generate_random_moving_obstacles(scenario, random_move)
+        self.obstacles = generate_random_moving_obstacles(scenario, random_move)
+        
         # keeping track of robot position and trajectory
         self.simX = np.ndarray((0, self.nx))
         self.simU = np.ndarray((0, self.nu))
@@ -115,19 +108,14 @@ class RobotOcpProblem():
             # mixture of L1 and L2 penalty
             self.ocp.constraints.Jsh = np.eye(len(self.obstacles))
             self.ocp.constraints.Jsh_e = np.eye(len(self.obstacles))
-            # self.ocp.constraints.Jbu = np.zeros(len(self.obstacles))
-            # self.ocp.constraints.Jsbu = np.eye(len(self.obstacles))
-            # no L2 penalty on obstacle hits
-            self.ocp.cost.Zl = np.ones(len(self.obstacles))
-            self.ocp.cost.Zl_e = np.ones(len(self.obstacles))
-            # self.ocp.cost.Zl = np.zeros(len(self.obstacles))
-            # self.ocp.cost.Zl_e = np.zeros(len(self.obstacles))
-            # # L1 penalty on hits
-            # self.ocp.cost.zl = np.ones(len(self.obstacles))
-            # self.ocp.cost.zl_e = np.ones(len(self.obstacles))
+            ### slack cost matrices will be set up in separate function for every iteration
+            # # no L1 penalty on hits
             self.ocp.cost.zl = np.zeros(len(self.obstacles))
             self.ocp.cost.zl_e = np.zeros(len(self.obstacles))
-            # no penalty on violations of control constraints
+            # # L2 penalty on obstacle hits
+            self.ocp.cost.Zl = np.zeros(len(self.obstacles))
+            self.ocp.cost.Zl_e = np.zeros(len(self.obstacles))
+            # no upper bound constraints to slack
             self.ocp.cost.Zu = np.zeros_like(self.ocp.cost.Zl)
             self.ocp.cost.Zu_e = np.zeros_like(self.ocp.cost.Zl_e)
             self.ocp.cost.zu = np.zeros(len(self.obstacles))
@@ -154,14 +142,12 @@ class RobotOcpProblem():
             self.parameterize_slack()
             
     def parameterize_slack(self):
-        # scale = 1e4 * (np.sum((self.x0[:2] - self.subgoal)**2) + 50)
-        # scale = 1e4 * (np.sum((np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, np.zeros(2)))**2) + 50)
-        scale = 500 * (2 * np.sum((np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, np.zeros(2)))**2) + 50)
-        # for i in range(N_SOLV+1):
+        scale = 1e4 * (np.sum((np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, np.zeros(2)))**2) + 50)
         for i in range(N_SOLV+1):
             alpha_i = scale * (N_SOLV - i) / N_SOLV
-            # zl_i = alpha_i * np.ones(len(self.obstacles))
+            zl_i = alpha_i * np.ones(len(self.obstacles))
             Zl_i = alpha_i * np.ones(len(self.obstacles))
+            self.ocp_solver.cost_set(i, 'zl', zl_i)
             self.ocp_solver.cost_set(i, 'Zl', Zl_i)
     
     def parameterize_model(self):
@@ -205,12 +191,7 @@ class RobotOcpProblem():
             self.ocp_solver.set(0, 'lbx', self.x0)
             
             # solve the ocp for the new starting position and get control for next step
-            # print(f"\n\nRUNNING STAGE {i+1}")
             stat_solv = self.ocp_solver.solve()
-            # print(f"Solver status: {stat_solv}")
-            # self.ocp_solver.store_iterate(f"logs/logs_stage_{i}_solv_state_{stat_solv}.json")
-            # self.ocp_solver.print_statistics()
-            # print(f"constraints on u {self.ocp_solver.get(4, 'lbu')}")
             
             # simulate model from current position and computed control
             u = self.ocp_solver.get(0, 'u')
@@ -219,7 +200,6 @@ class RobotOcpProblem():
             
             # if solver ran into error reset initial guess after getting the last control
             if stat_solv in [4]:
-                ran_into_error = True
                 if self.init_guess_when_error:
                     self.set_initial_guess()
                     
@@ -284,11 +264,9 @@ class RobotOcpProblem():
         print(f"Min margin to obstacle {self.min_margin_traj}")
         print(f"Final difference to sub goal state: {np.linalg.norm((self.simX[-1][0:2] - self.subgoal))}")
         print(f"maximal control along trajectory: {u_max}")
-        # print(f"left bounds: {out_of_bounds}")
-        # print(f"Ran into error: {ran_into_error}")
+        print(f"left bounds: {out_of_bounds}")
         
         if visualize:
-            print(f"Visualizing seed {self.seed}")
             self.vis = VisDynamicRobotEnv(self.obstacles)
             self.vis.set_trajectory(self.simX[:,:2].T)
             self.vis.set_pred_trajectories(self.pred)
@@ -320,22 +298,22 @@ class RobotOcpProblem():
         #     y_guess = self.x0[1] + i / (N_SOLV) * (self.subgoal[1] - self.x0[1])
         #     self.ocp_solver.set(i, 'x', np.array([x_guess, y_guess, psi_guess, 0, 0]))
         x_guess = self.x0
-        x_guess[4:] = np.zeros(1)
+        x_guess[3:] = np.zeros(1)
         for i in range(N_SOLV + 1):
             if i < N_SOLV:
                 self.ocp_solver.set(i, 'u', np.zeros(2))
-            # x_guess[3:] = np.zeros(2)
             self.ocp_solver.set(i, 'x', x_guess)
         
     
-    def set_up_new_experiment(self, seed=None, scenario='RANDOM', init_guess_when_error=False, random_move=False, show_pred=False):
+    def set_up_new_experiment(self, scenario='RANDOM', init_guess_when_error=False, random_move=False, show_pred=False):
         self.ocp_solver.reset()
-        self.init_experiment(seed, scenario, init_guess_when_error, random_move, show_pred)
+        self.init_experiment(scenario, init_guess_when_error, random_move, show_pred)
 
     
 if __name__ == "__main__":
-    ocp_problem = RobotOcpProblem(np.array([X_MIN + 2, Y_MIN + 2, np.pi / 4, 0, 0]), np.array([X_MAX - 2, Y_MAX - 2]), 0, slack=True)
+    ocp_problem = RobotOcpProblem(np.array([X_MIN + 2, Y_MIN + 2, np.pi / 4, 0, 0]), np.array([X_MAX - 2, Y_MAX - 2]), slack=True)
     for i in range(10):
-        ocp_problem.set_up_new_experiment(i, scenario='RANDOM', init_guess_when_error=True, random_move=True, show_pred=True)
+        np.random.seed(i)
+        ocp_problem.set_up_new_experiment(scenario='RANDOM', init_guess_when_error=True, random_move=True, show_pred=True)
         res = ocp_problem.step(200, True)
         

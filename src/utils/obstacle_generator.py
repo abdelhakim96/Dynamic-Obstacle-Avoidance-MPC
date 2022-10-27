@@ -5,9 +5,8 @@ import numpy as np
 from utils.visualization import Obstacle
 from models.world_specification import *
 
-def generate_random_moving_obstacles(seed=None, scenario='RANDOM', random_move=False):
-    if seed is not None:
-        np.random.seed(seed)
+def generate_random_moving_obstacles(scenario='RANDOM', random_move=False):
+    print(scenario)
     if scenario == 'RANDOM':
         x_coordinates = np.random.uniform(X_MIN_OBST, X_MAX_OBST, (N_OBST, 1))
         y_coordinates = np.random.uniform(Y_MIN_OBST, Y_MAX_OBST, (N_OBST, 1))
@@ -25,5 +24,5 @@ def generate_random_moving_obstacles(seed=None, scenario='RANDOM', random_move=F
     spec = np.hstack((x_coordinates, y_coordinates, vx, vy))
     obstacles = []
     for i, s in enumerate(spec):
-        obstacles += [Obstacle(*s, random_move, i*seed)]
-    return obstacles
+        obstacles += [Obstacle(*s, random_move)]
+    return obstacles 
