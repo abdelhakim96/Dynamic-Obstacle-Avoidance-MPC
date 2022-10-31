@@ -1,0 +1,1 @@
+{"slack": true, "random_move": true, "init_guess": true, "scenario": "EDGE", "TF": 1, "N_SOLV": 10, "N_OBST": 5, "QP_ITER": 50}
