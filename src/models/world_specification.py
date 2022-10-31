@@ -43,3 +43,6 @@ X_MAX_OBST = Y_MAX_ROBOT
 TF = 2
 N_SOLV = int(TF * 10)
 TOL = 0.15
+
+# define the number of iterations to solve the QP
+QP_ITER = 50
