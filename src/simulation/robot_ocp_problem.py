@@ -5,7 +5,7 @@ from acados_template.acados_ocp import AcadosOcp
 from acados_template.acados_ocp_solver import AcadosOcpSolver
 from acados_template.acados_sim_solver import AcadosSimSolver
 from models.robot_model import export_robot_ode_model
-from models.world_specification import N_OBST, N_SOLV, TF, R_ROBOT, MARGIN, TOL, V_MAX_OBST, V_MAX_ROBOT, X_MAX, X_MIN, Y_MAX, Y_MIN, C_MAX
+from models.world_specification import N_OBST, N_SOLV, TF, R_ROBOT, MARGIN, TOL, V_MAX_OBST, V_MAX_ROBOT, X_MAX, X_MIN, Y_MAX, Y_MIN, C_MAX, QP_ITER
 from utils.obstacle_generator import generate_random_moving_obstacles
 from utils.visualization import VisDynamicRobotEnv
 
@@ -21,9 +21,9 @@ class RobotOcpProblem():
         self.nx = self.model.x.size()[0]
         self.nu = self.model.u.size()[0]
         # costs on controls
-        self.R = 0.4 * np.eye(self.nu)
+        self.R = 0.15 * np.eye(self.nu)
         # cost on distance to goal
-        self.Q = 1.5 * np.eye(4)
+        self.Q = 2 * np.eye(4)
         self.Q_e = 5 * np.eye(4)
         
         self.init_experiment(scenario, init_guess_when_error, random_move, show_pred)
@@ -128,6 +128,7 @@ class RobotOcpProblem():
         self.ocp.solver_options.levenberg_marquardt = 2.0
         self.ocp.solver_options.integrator_type = 'IRK'
         self.ocp.solver_options.nlp_solver_type = 'SQP_RTI'  # 'SQP_RTI'
+        self.ocp.solver_options.qp_solver_iter_max = QP_ITER
         self.ocp.solver_options.tf = TF
         
         # specify solver and integrator, using same specification
@@ -315,5 +316,5 @@ if __name__ == "__main__":
     for i in range(10):
         np.random.seed(i)
         ocp_problem.set_up_new_experiment(scenario='RANDOM', init_guess_when_error=True, random_move=True, show_pred=True)
-        res = ocp_problem.step(200, True)
+        res = ocp_problem.step(400, True)
         
