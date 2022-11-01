@@ -24,7 +24,7 @@ for s in scenarios:
         data = np.ndarray((100, 6))
         init_guess_str = 'init_guess' if ini else 'no_init_guess'
         # store experimental data in dictionary and write it to json file
-        experiment_dict = {"slack": slack, "random_move": random_move, "init_guess": ini, "scenario": s, "TF": TF, "N_SOLV": N_SOLV, "N_OBST": N_OBST, "QP_ITER": QP_ITER, 'interpolate_init': True}
+        experiment_dict = {"slack": slack, "random_move": random_move, "init_guess": ini, "scenario": s, "TF": TF, "N_SOLV": N_SOLV, "N_OBST": N_OBST, "QP_ITER": QP_ITER}
         for i in range(100):
             np.random.seed(i)
             print(f'{s}, {init_guess_str} solving problem: {i}')
