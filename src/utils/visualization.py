@@ -125,7 +125,13 @@ class VisDynamicRobotEnv():
                                              init_func=self._init_vis,
                                              frames=self._t_range, interval=50)
         plt.show()
-    
+
+    def save_anitmation(self, filename):
+        self._anim = animation.FuncAnimation(self._fig, self._animate, 
+                                             init_func=self._init_vis,
+                                             frames=self._t_range, interval=50)
+        self._anim.save(filename, writer=animation.PillowWriter(fps=10))
+        
     def show_env(self):
         plt.show()
     
