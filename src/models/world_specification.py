@@ -23,7 +23,7 @@ C_MAX = 8
 
 # fix number and shape of obstacles in the grid
 N_OBST = 5
-R_MIN_OBST = 0.6
+R_MIN_OBST = 30.6
 R_MAX_OBST = 1.0
 R_OBST = 1
 RANDOMNESS = 0.1
@@ -40,9 +40,14 @@ X_MIN_OBST = Y_MIN_OBST
 X_MAX_OBST = Y_MAX_ROBOT
 
 # define timeframe and number of steps to simulate
+<<<<<<< HEAD
 TF = 2
 DT = 10
 N_SOLV = int(TF * DT)
+=======
+TF = 0.5
+N_SOLV = int(TF * 10)
+>>>>>>> origin/bounce2
 TOL = 0.15
 
 # define the number of iterations to solve the QP
