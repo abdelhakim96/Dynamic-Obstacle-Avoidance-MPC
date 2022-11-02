@@ -35,11 +35,11 @@ def run_experiment():
                 ocp.set_up_new_experiment(s, ini, random_move=True)
                 data[i] = ocp.step(400)[1:]
             # store the data to a .csv
-            if not os.path.exists(f'test_data/multiple/'):
-                os.makedirs(f'test_data/multiple/')
-            np.savetxt(f'test_data/multiple/{timestamp}_experiment_data.csv', data, delimiter=';')
+            if not os.path.exists(f'test_data/new/'):
+                os.makedirs(f'test_data/new/')
+            np.savetxt(f'test_data/new/{timestamp}_experiment_data.csv', data, delimiter=';')
             # store the experimental parameters to a json file
-            with open(f'test_data/multiple/{timestamp}_experiment_spec.json', 'w') as json_file:
+            with open(f'test_data/new/{timestamp}_experiment_spec.json', 'w') as json_file:
                 json.dump(experiment_dict, json_file)
 
 if __name__ == '__main__':
