@@ -22,9 +22,9 @@ import os
 # and store them together with the np.arrays in a list of tuples
 def load_experiment_data():
     data = []
-    for file in os.listdir('test_data'):
+    for file in os.listdir('test_data/multiple/'):
         if file.endswith('.json'):
-            fpath = 'test_data/' + file
+            fpath = 'test_data/multiple/' + file
             f = open(fpath)
             data += [(json.load(f), np.loadtxt(fpath[:-len('_spec.json')] + '_data.csv', delimiter=';'))]
             # print(data)
