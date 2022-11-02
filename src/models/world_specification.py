@@ -41,7 +41,8 @@ X_MAX_OBST = Y_MAX_ROBOT
 
 # define timeframe and number of steps to simulate
 TF = 2
-N_SOLV = int(TF * 10)
+DT = 10
+N_SOLV = int(TF * DT)
 TOL = 0.15
 
 # define the number of iterations to solve the QP
