@@ -9,3 +9,6 @@ repo for the MPC-RL summer school project
     ├───simulation
     └───utils
 ```
+
+# Example Animation
+![] (https://github.com/abdelhakim96/Dynamic-Obstacle-Avoidance-MPC/blob/main/gifs/animation_example.gif)
