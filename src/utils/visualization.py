@@ -97,7 +97,9 @@ class VisDynamicRobotEnv():
         self._ax.set_aspect('equal')
         for o in self._obstacles:
             self._ax.add_patch(o)
-        self._robot_vis = plt.Circle(self._robot_pos_init, self._robot_size, fc='y')
+        self._robot_vis = plt.Circle((0, 0), R_ROBOT, fc='y')
+        self._ax.add_patch(plt.Circle((X_MIN + 2, Y_MIN + 2), TOL, fill=False, edgecolor='orange'))
+        self._ax.add_patch(plt.Circle((X_MAX - 2, Y_MAX - 2), TOL, fill=False, edgecolor='g'))
         self._traj_vis = plt.Line2D([], [])
         self._traj_vis_pred = plt.Line2D([], [], c='y')
         self._ax.add_line(self._traj_vis)
@@ -115,29 +117,21 @@ class VisDynamicRobotEnv():
         # return self._robot_vis,
         return [self._robot_vis] + [self._obstacles] + [self._traj_vis_pred]
     
-    def get_robot_figure(self):
-        self._robot_vis.center = self._trajectory[:, -1]
-        self._ax.add_patch(self._robot_vis)
-        return self._fig
-    
-    def image_to_array(self, fig):
-        fig.canvas.draw()
-        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
-        image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-        return image
-
-    def image_save(self, i):
-        self._fig.savefig("figure"+str(i)+".png")
-
     def run_animation(self):
         # self._anim = animation.FuncAnimation(self._fig, self._gianimate, 
         #                                      init_func=self._init_vis,
         #                                      frames=self._t_range, interval=50)
         self._anim = animation.FuncAnimation(self._fig, self._animate, 
                                              init_func=self._init_vis,
-                                             frames=self._t_range, interval=20)
+                                             frames=self._t_range, interval=50)
         plt.show()
-    
+
+    def save_anitmation(self, filename):
+        self._anim = animation.FuncAnimation(self._fig, self._animate, 
+                                             init_func=self._init_vis,
+                                             frames=self._t_range, interval=50)
+        self._anim.save(filename, writer=animation.PillowWriter(fps=10))
+        
     def show_env(self):
         plt.show()
     
@@ -155,4 +149,3 @@ class VisDynamicRobotEnv():
     
     def set_obst_trajectory(self, trajectories):
         self._obst_trajectories = trajectories
-    
