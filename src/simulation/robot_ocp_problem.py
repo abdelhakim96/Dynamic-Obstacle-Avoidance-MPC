@@ -1,48 +1,61 @@
 import sys
 sys.path.append('../')
-
 import numpy as np
-import casadi as ca
 from acados_template.acados_ocp import AcadosOcp
 from acados_template.acados_ocp_solver import AcadosOcpSolver
 from acados_template.acados_sim_solver import AcadosSimSolver
 from models.robot_model import export_robot_ode_model
-from utils.obstacle_generator import generate_random_obstacles
-from utils.visualization import VisStaticRobotEnv
-from models.world_specification import N_SOLV, TF, R_ROBOT, MARGIN, TOL
+from models.world_specification import N_OBST, N_SOLV, TF, R_ROBOT, MARGIN, TOL, V_MAX_OBST, V_MAX_ROBOT, X_MAX, X_MIN, Y_MAX, Y_MIN, C_MAX, QP_ITER
+from utils.obstacle_generator import generate_random_moving_obstacles
+from utils.visualization import VisDynamicRobotEnv
+
 
 class RobotOcpProblem():
-    def __init__(self, robot_init, robot_end, obstacles, seed=None):
+    def __init__(self, robot_init, robot_end, scenario='RANDOM', slack=True, init_guess_when_error=False, random_move=False, show_pred=False):
         self.robot_init = robot_init
         self.robot_end = robot_end
         self.subgoal = self.robot_end
         self.seed = seed
-        self.obstacles = obstacles
-
-        # if self.seed is not None:
-        #     self.obstacles = generate_random_obstacles(self.seed)
-        # else:
-        #     self.obstacles = generate_random_obstacles()
+        
+        if self.seed is not None:
+            self.obstacles = generate_random_obstacles(self.seed)
+        else:
+            self.obstacles = generate_random_obstacles()
         
         
         self.model = export_robot_ode_model()
         self.nx = self.model.x.size()[0]
         self.nu = self.model.u.size()[0]
-        self.R = 0.4 * np.eye(self.nu)
-        self.E_pos = 10 * np.eye(2)   # penalty on end position
-        self.E_dot = 5 * np.eye(2)   # penalty on final speed (angular + translation)
+        # costs on controls
+        self.R = 0.15 * np.eye(self.nu)
+        # cost on distance to goal
+        self.Q = 2 * np.eye(4)
+        self.Q_e = 5 * np.eye(4)
         
-        # keeping track of robot position and trajectory
-        self.simX = np.ndarray((0, self.nx))
-        self.simU = np.ndarray((0, self.nu))
-        self.x0 = robot_init
-        self.simX = np.append(self.simX, self.x0.reshape((1, self.nx)), axis=0)
-        self.reached_goal = False
-        self.min_margin_traj = np.inf
+        self.init_experiment(scenario, init_guess_when_error, random_move, show_pred)
         
         # initialize ocp and the solver
         self.init_ocp()
         self.init_ocp_solver()
+    
+    def init_experiment(self, scenario, init_guess_when_error, random_move=False, show_pred=False):
+        self.subgoal = self.robot_end
+        self.init_guess_when_error = init_guess_when_error
+        self.show_pred = show_pred
+        self.obstacles = generate_random_moving_obstacles(scenario, random_move)
+        
+        # keeping track of robot position and trajectory
+        self.simX = np.ndarray((0, self.nx))
+        self.simU = np.ndarray((0, self.nu))
+        if self.show_pred:
+            self.pred = np.ndarray((0, N_SOLV+1, 2))
+        self.x0 = self.robot_init
+        self.simX = np.append(self.simX, self.x0.reshape((1, self.nx)), axis=0)
+        if self.show_pred:
+            self.pred = np.append(self.pred, np.zeros((1, N_SOLV+1, 2)), 0)
+        self.reached_goal = False
+        self.min_margin_traj = np.inf
+        
     
     def init_ocp(self):
         self.ocp = AcadosOcp()
@@ -52,21 +65,28 @@ class RobotOcpProblem():
         ## setup ocp cost
         self.ocp.cost.cost_type = "LINEAR_LS"
         self.ocp.cost.cost_type_e = "LINEAR_LS"
-        self.ocp.cost.Vx = np.zeros((self.nu, self.nx))
-        self.ocp.cost.Vu = np.eye(self.nu)
-        self.ocp.cost.yref = np.zeros(self.nu)
+        
+        # build Vx
+        self.ocp.cost.Vx = np.zeros((self.nx + self.nu - 1, self.nx))
+        self.ocp.cost.Vx[:2,:2] = np.eye(2)
+        self.ocp.cost.Vx[2:4,3:] = np.eye(2)
+        self.ocp.cost.Vu = np.zeros((self.nx + self.nu - 1, self.nu))
+        self.ocp.cost.Vu[-2:] = np.eye(self.nu)
+        # self.ocp.cost.yref = np.vstack((self.robot_end.reshape((self.nx - 1,1)), np.zeros((self.nu,1))))
+        self.ocp.cost.yref = np.hstack((self.robot_end.reshape(2), np.zeros(4)))
         self.ocp.cost.Vx_0 = self.ocp.cost.Vx
         self.ocp.cost.Vu_0 = self.ocp.cost.Vu
         self.ocp.cost.yref_0 = self.ocp.cost.yref
-        self.ocp.cost.Vx_e = np.eye(self.nx)
-        self.ocp.cost.yref_e = np.hstack((self.robot_end.reshape(2), np.zeros(self.nx-2)))
-        self.ocp.cost.W = 2 * self.R
+        self.ocp.cost.Vx_e = np.zeros((self.nx - 1, self.nx))
+        self.ocp.cost.Vx_e[:2, :2] = np.eye(2)
+        self.ocp.cost.Vx_e[-2:, -2:] = np.eye(2)
+        self.ocp.cost.yref_e = np.hstack((self.robot_end.reshape(2), np.zeros(2)))
+        self.ocp.cost.W = np.zeros((self.nx - 1 + self.nu, self.nx - 1 + self.nu))
+        self.ocp.cost.W[:4, :4] = self.Q
+        self.ocp.cost.W[-2:, -2:] = self.R
         self.ocp.cost.W_0 = self.ocp.cost.W
         # build the matrix for the terminal costs
-        W_e_1 = np.hstack((self.E_pos, np.zeros((2, self.nx - 2))))
-        W_e_2 = np.zeros((1, self.nx))
-        W_e_3 = np.hstack((np.zeros((2, self.nx - 2)), self.E_dot))
-        self.ocp.cost.W_e = 2* np.vstack((W_e_1, W_e_2, W_e_3))
+        self.ocp.cost.W_e = self.Q_e
         
         ## setup ocp constraints
         # fix initial position
@@ -74,30 +94,47 @@ class RobotOcpProblem():
         
         # no driving backwards
         # & staying within designated rectangle defined by edges (-2, -2) , (2, 2)
-        self.ocp.constraints.lbx = np.array([-7, -7, -6, -6])
+        self.ocp.constraints.lbx = np.array([-7, -7, 0, -6])
         self.ocp.constraints.ubx = np.array([7, 7, 6, 6])
         self.ocp.constraints.idxbx = np.array([0, 1, 3, 4])
         
-        # avoid obstacles
-        h = []
-        h_lb = []
-        h_ub = []
-        for o in self.obstacles:
-            h += [(self.model.x[0] - o.x)**2 + (self.model.x[1] - o.y)**2]
-            h_lb += [(o.r + R_ROBOT + MARGIN)**2]
-            h_ub += [1e15]
+        self.ocp.constraints.lbu = np.array([-C_MAX, -C_MAX])
+        self.ocp.constraints.ubu = np.array([C_MAX, C_MAX])
+        self.ocp.constraints.idxbu = np.array([0, 1])
+
+        if self.obstacles is not None and len(self.obstacles) > 0:
+            self.ocp.constraints.lh = np.zeros(len(self.obstacles))
+            self.ocp.constraints.uh = 1e5 * np.ones(len(self.obstacles))
+            self.ocp.constraints.lh_e = np.zeros(len(self.obstacles))
+            self.ocp.constraints.uh_e = 1e5 * np.ones(len(self.obstacles))
+        self.ocp.parameter_values = np.zeros(2*N_OBST)
         
-        if len(h) > 0:
-            self.model.con_h_expr = ca.vertcat(*h)
-            self.ocp.constraints.lh = np.array(h_lb)
-            self.ocp.constraints.uh = np.array(h_ub)
-    
+        if self.slack:
+            # allow for some slack, only penalize violations on lower bound
+            # mixture of L1 and L2 penalty
+            self.ocp.constraints.Jsh = np.eye(len(self.obstacles))
+            self.ocp.constraints.Jsh_e = np.eye(len(self.obstacles))
+            ### slack cost matrices will be set up in separate function for every iteration
+            # # no L1 penalty on hits
+            self.ocp.cost.zl = np.zeros(len(self.obstacles))
+            self.ocp.cost.zl_e = np.zeros(len(self.obstacles))
+            # # L2 penalty on obstacle hits
+            self.ocp.cost.Zl = np.zeros(len(self.obstacles))
+            self.ocp.cost.Zl_e = np.zeros(len(self.obstacles))
+            # no upper bound constraints to slack
+            self.ocp.cost.Zu = np.zeros_like(self.ocp.cost.Zl)
+            self.ocp.cost.Zu_e = np.zeros_like(self.ocp.cost.Zl_e)
+            self.ocp.cost.zu = np.zeros(len(self.obstacles))
+            self.ocp.cost.zu_e = np.zeros(len(self.obstacles))
+
     def init_ocp_solver(self):
         # configure solver
         self.ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
+        self.ocp.solver_options.levenberg_marquardt = 2.0
         self.ocp.solver_options.integrator_type = 'IRK'
         self.ocp.solver_options.nlp_solver_type = 'SQP_RTI'  # 'SQP_RTI'
+        self.ocp.solver_options.qp_solver_iter_max = QP_ITER
         self.ocp.solver_options.tf = TF
         
         # specify solver and integrator, using same specification
@@ -107,6 +144,32 @@ class RobotOcpProblem():
         # initialize control trajectory to all 0
         for i in range(N_SOLV):
             self.ocp_solver.set(i, 'u', np.array([0, 0]))
+        
+        if self.slack:
+            self.parameterize_slack()
+            
+    def parameterize_slack(self):
+        scale = 1e4 * (np.sum((np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, np.zeros(2)))**2) + 50)
+        for i in range(N_SOLV+1):
+            alpha_i = scale * (N_SOLV - i) / N_SOLV
+            zl_i = alpha_i * np.ones(len(self.obstacles))
+            Zl_i = alpha_i * np.ones(len(self.obstacles))
+            self.ocp_solver.cost_set(i, 'zl', zl_i)
+            self.ocp_solver.cost_set(i, 'Zl', Zl_i)
+    
+    def parameterize_model(self):
+        """
+            Parameterize model based on predictions of obstacle positions over prediction horizon.
+        """
+        # initialize parameters of the model to solve
+        P = np.ndarray((N_SOLV + 1, N_OBST, 2))
+                
+        for i, o in enumerate(self.obstacles):
+            P[:,i,:] = o.predict_trajectory(N_SOLV)
+        
+        for i in range(N_SOLV+1):
+            self.ocp_solver.set_params_sparse(i, np.array([j for j in range(2*N_OBST)]), P[i].flatten())
+            self.ocp_solver.set(i, 'p', P[i].flatten())
     
     def step(self, max_iter, iteration, visualize=False):
         """
@@ -118,30 +181,51 @@ class RobotOcpProblem():
             reached_goal: whether robot reached the tolerance area around the goal
         """
         reached_subgoal = False
+        out_of_bounds = False
+        ran_into_error = False
+        self.set_initial_guess()
+        distance_to_goal = np.linalg.norm(np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, [0, 0]))
+        u_max = 0
         i = 0
         while i < max_iter:
+            # parameterize the solver according to current obstacle positions
+            self.parameterize_model()
+            if self.slack:
+                self.parameterize_slack()
+
             # set constraint on starting position (x0_bar)
             self.ocp_solver.set(0, 'ubx', self.x0)
             self.ocp_solver.set(0, 'lbx', self.x0)
             
             # solve the ocp for the new starting position and get control for next step
-            # print(f"\n\nRUNNING STAGE {i+1}")
+            print(f"\n\nRUNNING STAGE {i+1}")
             self.ocp_solver.solve()
-            # self.ocp_solver.print_statistics()
+            self.ocp_solver.print_statistics()
             
             
             # simulate model from current position and computed control
             u = self.ocp_solver.get(0, 'u')
+            if np.max(np.abs(u)) > u_max:
+                u_max = np.max(np.abs(u))
+            
+            # if solver ran into error reset initial guess after getting the last control
+            if stat_solv in [4]:
+                if self.init_guess_when_error:
+                    self.set_initial_guess()
+                    
             self.ocp_integrator.set('x', self.x0)
             self.ocp_integrator.set('u', u)
             self.ocp_integrator.solve()
             
             # get the next starting position after simulation
             self.x0 = self.ocp_integrator.get('x')
+            if self.x0[0] < X_MIN or self.x0[0] > X_MAX or self.x0[1] < Y_MIN or self.x0[1] > Y_MAX:
+                out_of_bounds = True
             
-            # also get (x,y) coordinate of predicted terminal state xN from the solved OCP
-            # will be later needed for training the RL agend
-            xN = self.ocp_solver.get(N_SOLV, 'x')[0:2]
+            # update the obstacle positions
+            for o in self.obstacles:
+                o.step()
+            
             
             # check wether robot did hit an obstacle:
             min_margin = np.inf
@@ -152,12 +236,25 @@ class RobotOcpProblem():
             if min_margin < self.min_margin_traj:
                 self.min_margin_traj = min_margin
             
+            # also get (x,y) coordinate of predicted terminal state xN from the solved OCP
+            # will be later needed for training the RL agend
+            xN = self.ocp_solver.get(N_SOLV, 'x')[0:2]
+            
             self.simX = np.append(self.simX, self.x0.reshape((1, self.nx)), axis=0)
             self.simU = np.append(self.simU, u.reshape((1, self.nu)), axis=0)
             
+            if self.show_pred:
+                coordinates = np.zeros((1,N_SOLV+1, 2))
+                for j in range(N_SOLV+1):
+                    coordinates[0,j] = np.array(self.ocp_solver.get(j, 'x')[0:2])
+                self.pred = np.append(self.pred, coordinates, axis=0)
+            
+            
             # compute the norm of the state vector (excluding the orientation which we do not consider)
             # in case we are within the tolerance end the closed loop simulation
-            if np.linalg.norm(np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, [0, 0])) <= TOL:
+            # distance_to_goal = np.linalg.norm(np.take(self.x0, [0, 1, 3, 4]) - np.append(self.subgoal, [0, 0]))
+            distance_to_goal = np.linalg.norm((self.x0[:2] - self.subgoal))
+            if distance_to_goal <= TOL:
                 reached_subgoal = True
                 break
             
@@ -171,29 +268,21 @@ class RobotOcpProblem():
                 
             i += 1
             
-            # if i == max_iter // 2:
+            if i == max_iter // 2:
                 # ocp_solver.cost_set(N-1, 'yref', np.array([0, 0]))
-                # print("set new y_ref")
+                print("set new y_ref")
             
             # # some statistics
             # print(ocp_solver.get_stats('time_tot'))
         
         print(f"Final difference to sub goal state: {self.simX[-1][0:2] - self.subgoal}")
-        print(f"Final state: {self.simX[-1][0:2]}")
-       
         
-        if True:
+        if visualize:
             vis = VisStaticRobotEnv((-7.5, 7.5), (-7.5, 7.5), (0, 0), R_ROBOT, self.obstacles)
             vis.set_trajectory(self.simX[:,:2].T)
-            fig = vis.get_robot_figure()
-            fig = vis.image_to_array(fig)
-
-            
-            if iteration % 50 == 0:
-                vis.image_save(iteration)
-
+            vis.run_animation()
         
-        return self.simX[-1], (self.min_margin_traj <= 0), reached_subgoal, fig
+        return self.simX[-1], (self.min_margin_traj <= 0), reached_subgoal
     
     def set_subgoal(self, x, y):
         """
@@ -201,13 +290,40 @@ class RobotOcpProblem():
         """
         self.subgoal = np.array([x, y])
         self.ocp_solver.cost_set(N_SOLV, 'yref', np.array([x, y, 0, 0, 0]))
+        
+    def set_initial_guess(self):
+        """
+            Set initial guess as direct line to goal evenly spaced for the number of solver steps.
+            Guess controls and speed as 0.
+        """
+        self.ocp_solver.reset()
+        
+        # ## straight line guess, not so successfull 
+        # psi_guess = np.arctan2(self.subgoal[1] - self.x0[1], self.subgoal[0] - self.subgoal[0])
+        # for i in range(N_SOLV + 1):
+        #     if i < N_SOLV:
+        #         self.ocp_solver.set(i, 'u', np.array([0, 0]))
+        #     x_guess = self.x0[0] + i / (N_SOLV) * (self.x0[0] - self.x0[0])
+        #     y_guess = self.x0[1] + i / (N_SOLV) * (self.subgoal[1] - self.x0[1])
+        #     self.ocp_solver.set(i, 'x', np.array([x_guess, y_guess, psi_guess, 0, 0]))
+        x_guess = self.x0
+        x_guess[3:] = np.zeros(1)
+        for i in range(N_SOLV + 1):
+            if i < N_SOLV:
+                self.ocp_solver.set(i, 'u', np.zeros(2))
+            self.ocp_solver.set(i, 'x', x_guess)
+        
+    
+    def set_up_new_experiment(self, scenario='RANDOM', init_guess_when_error=False, random_move=False, show_pred=False):
+        self.ocp_solver.reset()
+        self.init_experiment(scenario, init_guess_when_error, random_move, show_pred)
 
     
 if __name__ == "__main__":
-    ocp_problem = RobotOcpProblem(np.array([-6, -6, np.pi / 4, 0, 0]), np.array([0, 0]), 0)
+    ocp_problem = RobotOcpProblem(np.array([-3, -6, np.pi / 4, 0, 0]), np.array([6, 6]), 0)
     for i in range(1):
-        ocp_problem.step(100, True)
-    # ocp_problem.set_subgoal(3, 6)
-    # for i in range(1):
-    #     ocp_problem.step(20, True)
+        ocp_problem.step(20, True)
+    ocp_problem.set_subgoal(3, 6)
+    for i in range(1):
+        ocp_problem.step(20, True)
         
