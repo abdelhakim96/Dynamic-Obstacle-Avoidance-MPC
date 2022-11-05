@@ -14,13 +14,7 @@ class RobotOcpProblem():
     def __init__(self, robot_init, robot_end, scenario='RANDOM', slack=True, init_guess_when_error=False, random_move=False, show_pred=False):
         self.robot_init = robot_init
         self.robot_end = robot_end
-        self.subgoal = self.robot_end
-        self.seed = seed
-        
-        if self.seed is not None:
-            self.obstacles = generate_random_obstacles(self.seed)
-        else:
-            self.obstacles = generate_random_obstacles()
+        self.slack = slack
         
         
         self.model = export_robot_ode_model()
@@ -94,8 +88,8 @@ class RobotOcpProblem():
         
         # no driving backwards
         # & staying within designated rectangle defined by edges (-2, -2) , (2, 2)
-        self.ocp.constraints.lbx = np.array([-7, -7, 0, -6])
-        self.ocp.constraints.ubx = np.array([7, 7, 6, 6])
+        self.ocp.constraints.lbx = np.array([-7, -7, -V_MAX_ROBOT, -V_MAX_ROBOT])
+        self.ocp.constraints.ubx = np.array([7, 7, V_MAX_ROBOT, V_MAX_ROBOT])
         self.ocp.constraints.idxbx = np.array([0, 1, 3, 4])
         
         self.ocp.constraints.lbu = np.array([-C_MAX, -C_MAX])
@@ -171,7 +165,7 @@ class RobotOcpProblem():
             self.ocp_solver.set_params_sparse(i, np.array([j for j in range(2*N_OBST)]), P[i].flatten())
             self.ocp_solver.set(i, 'p', P[i].flatten())
     
-    def step(self, max_iter, iteration, visualize=False):
+    def step(self, max_iter, visualize=False):
         """
         Run RTI solver until reaching the goal or but for at most max_iter steps.
         If vis is true show trajectory completed by the robot until now.
@@ -198,10 +192,7 @@ class RobotOcpProblem():
             self.ocp_solver.set(0, 'lbx', self.x0)
             
             # solve the ocp for the new starting position and get control for next step
-            print(f"\n\nRUNNING STAGE {i+1}")
-            self.ocp_solver.solve()
-            self.ocp_solver.print_statistics()
-            
+            stat_solv = self.ocp_solver.solve()
             
             # simulate model from current position and computed control
             u = self.ocp_solver.get(0, 'u')
@@ -268,21 +259,22 @@ class RobotOcpProblem():
                 
             i += 1
             
-            if i == max_iter // 2:
-                # ocp_solver.cost_set(N-1, 'yref', np.array([0, 0]))
-                print("set new y_ref")
-            
             # # some statistics
             # print(ocp_solver.get_stats('time_tot'))
         
-        print(f"Final difference to sub goal state: {self.simX[-1][0:2] - self.subgoal}")
+        print(f"Min margin to obstacle {self.min_margin_traj}")
+        print(f"Final difference to sub goal state: {np.linalg.norm((self.simX[-1][0:2] - self.subgoal))}")
+        print(f"maximal control along trajectory: {u_max}")
+        print(f"left bounds: {out_of_bounds}")
         
         if visualize:
-            vis = VisStaticRobotEnv((-7.5, 7.5), (-7.5, 7.5), (0, 0), R_ROBOT, self.obstacles)
-            vis.set_trajectory(self.simX[:,:2].T)
-            vis.run_animation()
-        
-        return self.simX[-1], (self.min_margin_traj <= 0), reached_subgoal
+            self.vis = VisDynamicRobotEnv(self.obstacles)
+            self.vis.set_trajectory(self.simX[:,:2].T)
+            self.vis.set_pred_trajectories(self.pred)
+            self.vis.set_obst_trajectory([o.get_trajectory().T for o in self.obstacles])
+            self.vis.run_animation()
+            self.vis = None
+        return self.simX[-1], (self.min_margin_traj <= 0), reached_subgoal, self.min_margin_traj, distance_to_goal, i, out_of_bounds
     
     def set_subgoal(self, x, y):
         """
@@ -320,10 +312,9 @@ class RobotOcpProblem():
 
     
 if __name__ == "__main__":
-    ocp_problem = RobotOcpProblem(np.array([-3, -6, np.pi / 4, 0, 0]), np.array([6, 6]), 0)
-    for i in range(1):
-        ocp_problem.step(20, True)
-    ocp_problem.set_subgoal(3, 6)
-    for i in range(1):
-        ocp_problem.step(20, True)
+    ocp_problem = RobotOcpProblem(np.array([X_MIN + 2, Y_MIN + 2, np.pi / 4, 0, 0]), np.array([X_MAX - 2, Y_MAX - 2]), slack=True)
+    for i in range(10):
+        np.random.seed(i)
+        ocp_problem.set_up_new_experiment(scenario='RANDOM', init_guess_when_error=True, random_move=True, show_pred=True)
+        res = ocp_problem.step(400, True)
         
