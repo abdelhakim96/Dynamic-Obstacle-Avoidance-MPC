@@ -5,7 +5,6 @@ repo for the MPC-RL summer school project
 
 ```
 └───src
-    ├───agent
     ├───models
     ├───simulation
     └───utils
